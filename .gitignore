@@ -1,0 +1,69 @@
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# Node dependencies
+node_modules
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# Security - Google Service Account & Credentials
+server/api/*.json
+server/utils/*.json
+*.pem
+*.key
+*.p12
+
+# Security - Environment & Config Files
+.env
+.env.*
+!.env.example
+.env.local
+.env.production
+
+# Security - API Keys & Secrets
+secrets/
+credentials/
+config/secrets.*
+
+# Claude Code
+.claude/settings.local.json
+
+# Development
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.vscode/
+.vs/
+
+# Operating System
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~

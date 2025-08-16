@@ -1,0 +1,33 @@
+
+@font-face {
+  font-family: 'Doran';
+  src: url('../fonts/Doran-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Doran';
+  src: url('../fonts/Doran-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Doran';
+  src: url('../fonts/Doran-Thin.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Add the font to Tailwind's font family utilities */
+:root {
+  --font-doran: 'Doran', system-ui, sans-serif;
+}
+
+.font-doran {
+  font-family: var(--font-doran);
+}
