@@ -4,9 +4,9 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
   devtools: { enabled: true },
   
-  // GitHub Pages base URL (replace 'barcode-scanner' with your repo name)
+  // GitHub Pages base URL
   app: {
-    baseURL: process.env.NODE_ENV === 'production' ? '/barcode-scanner/' : '/',
+    baseURL: process.env.NODE_ENV === 'production' ? '/Torino-Storage-Solutions/' : '/',
     buildAssetsDir: 'assets'
   },
 
