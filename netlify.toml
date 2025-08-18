@@ -1,6 +1,7 @@
-[build]
+﻿[build]
   command = "npm run build"
-  publish = "dist"
+  publish = ".output/public"
+  functions = ".output/server"
 
 [build.environment]
   NODE_VERSION = "18"
@@ -16,5 +17,3 @@
     X-Frame-Options = "DENY"
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "camera=(*), microphone=(), geolocation=(), interest-cohort=()"
