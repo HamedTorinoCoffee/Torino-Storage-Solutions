@@ -1,0 +1,1 @@
+import{_ as t,c as s,o as a,a8 as o}from"./CKiwDKMb.js";const c={class:"min-h-screen"},n={__name:"auth",setup(r){return(e,_)=>(a(),s("div",c,[o(e.$slots,"default",{},void 0,!0)]))}},u=t(n,[["__scopeId","data-v-5d97acd0"]]);export{u as default};

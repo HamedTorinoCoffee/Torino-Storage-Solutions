@@ -1,11 +1,205 @@
+<!-- pages/scan.vue -->
+<template>
+  <div class="scanner-container">
+    <div class="scanner-card">
+      <!-- Header -->
+      <div class="header">
+        <div class="icon-container">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/>
+            <line x1="7" y1="7" x2="7" y2="17" stroke="currentColor" stroke-width="1.5"/>
+            <line x1="12" y1="7" x2="12" y2="17" stroke="currentColor" stroke-width="1.5"/>
+            <line x1="17" y1="7" x2="17" y2="17" stroke="currentColor" stroke-width="0.5"/>
+          </svg>
+        </div>
+        <h1>اسکن محصول</h1>
+        <p class="subtitle">{{ cafeName ? `کافه ${cafeName}` : 'اسکن QR کد محصول' }}</p>
+      </div>
+
+      <!-- Message -->
+      <Transition name="fade">
+        <div v-if="message" :class="['message', `message-${message.type}`]">
+          {{ message.text }}
+        </div>
+      </Transition>
+
+      <!-- Main Form -->
+      <div class="form">
+        <!-- Camera Button (Capacitor) -->
+        <button
+          v-if="isCapacitor"
+          @click="startScan"
+          :disabled="isScanning || isSaving"
+          class="btn btn-primary btn-camera"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          <span v-if="!isScanning && !isSaving">اسکن QR محصول</span>
+          <span v-else-if="isScanning">
+            <span class="spinner"></span>
+            در حال اسکن...
+          </span>
+          <span v-else>
+            <span class="spinner"></span>
+            در حال ذخیره...
+          </span>
+        </button>
+
+        <!-- Web Camera Button -->
+        <button
+          v-if="!isCapacitor && isCameraSupported"
+          @click="startWebCameraScan"
+          :disabled="isScanning || isSaving"
+          class="btn btn-primary btn-camera"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          <span v-if="!isScanning && !isSaving">اسکن QR محصول</span>
+          <span v-else-if="isScanning">
+            <span class="spinner"></span>
+            در حال اسکن...
+          </span>
+          <span v-else>
+            <span class="spinner"></span>
+            در حال ذخیره...
+          </span>
+        </button>
+
+        <!-- Info Message -->
+        <div class="info-box">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <p>هر اسکن = خروج 1 کارتن (6 بسته)</p>
+        </div>
+      </div>
+
+      <!-- Web Camera Video -->
+      <Transition name="slide">
+        <div v-if="showWebCamera" class="camera-container">
+          <div class="camera-header">
+            <span>دوربین فعال</span>
+            <button @click="stopWebCamera" class="close-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <video
+            ref="videoRef"
+            autoplay
+            playsinline
+            class="camera-video"
+          ></video>
+          <div class="camera-overlay">
+            <div class="scan-frame"></div>
+            <p>کد QR محصول را در کادر قرار دهید</p>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- Last Result Box -->
+      <Transition name="slide">
+        <div v-if="lastResult" class="result-box">
+          <div class="result-header">
+            <span class="result-label">آخرین ثبت</span>
+            <span class="result-type">خروج 6 بسته</span>
+          </div>
+          <div class="result-grid">
+            <div class="result-item">
+              <span class="item-label">محصول:</span>
+              <span class="item-value">{{ lastResult.product }}</span>
+            </div>
+            <div class="result-item">
+              <span class="item-label">ترکیب:</span>
+              <span class="item-value">{{ lastResult.blend }}</span>
+            </div>
+            <div class="result-item">
+              <span class="item-label">منشأ:</span>
+              <span class="item-value">{{ lastResult.origin }}</span>
+            </div>
+            <div class="result-item">
+              <span class="item-label">تاریخ رست:</span>
+              <span class="item-value">{{ lastResult.roastDate }}</span>
+            </div>
+            <div class="result-item">
+              <span class="item-label">شماره بچ:</span>
+              <span class="item-value">{{ lastResult.batchNumber }}</span>
+            </div>
+            <div class="result-item">
+              <span class="item-label">تعداد خروجی:</span>
+              <span class="item-value">6 بسته (1 کارتن)</span>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- History Section -->
+      <div v-if="history.length > 0" class="history">
+        <div class="history-header">
+          <span class="section-title">تاریخچه امروز</span>
+          <span class="history-count">{{ history.length }} مورد</span>
+        </div>
+        
+        <div class="history-list">
+          <TransitionGroup name="list">
+            <div
+              v-for="item in history"
+              :key="item.id"
+              :class="['history-item', { 'not-synced': !item.synced }]"
+            >
+              <div class="history-main">
+                <span class="history-product">{{ item.product }} - {{ item.blend }}</span>
+                <span class="history-amount">6 بسته</span>
+              </div>
+              <div class="history-meta">
+                <span>{{ item.time }}</span>
+                <span v-if="!item.synced" class="sync-indicator">⚠ آفلاین</span>
+              </div>
+            </div>
+          </TransitionGroup>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div v-else class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+        </svg>
+        <p>هنوز اسکنی انجام نشده</p>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <NuxtLink to="/" class="btn btn-outline">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 18l-6-6 6-6"/>
+          </svg>
+          بازگشت به داشبورد
+        </NuxtLink>
+      </div>
+    </div>
+  </div>
+</template>
+
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from '~/composables/useAuth'
 import { useWebCamera } from '~/composables/useWebCamera'
 
-// استفاده از useAuth
-const { saveScan, user } = useAuth()
+// Auth & User info
+const { user } = useAuth()
+const cafeName = ref('')
 
 // Web camera support
 const webCamera = useWebCamera()
@@ -15,8 +209,7 @@ const isCapacitor = ref(false)
 const isCameraSupported = ref(false)
 const isScanning = ref(false)
 const isSaving = ref(false)
-const manualInput = ref('')
-const result = ref(null)
+const lastResult = ref(null)
 const message = ref(null)
 const history = ref([])
 const showWebCamera = ref(false)
@@ -26,18 +219,29 @@ const videoRef = ref()
 
 let BarcodeScanner = null
 
+// Constants
+const PACKAGES_PER_CARTON = 6  // Each scan = 1 carton = 6 packages
+
 // Lifecycle
 onMounted(async () => {
   console.log('📷 Scan page mounted')
   console.log('👤 User:', user.value)
   
-  // بدون بررسی احراز هویت، مستقیماً به بارگذاری ادامه می‌دهیم
+  // Get cafe name from user email and convert dots to underscores
+  if (user.value?.email) {
+    // Extract cafe name from email and replace dots with underscores
+    // e.g., "r.hazrati@example.com" -> "r_hazrati"
+    cafeName.value = user.value.email.split('@')[0].replace(/\./g, '_')
+    console.log('📝 Cafe sheet name:', cafeName.value)
+  }
+  
   loadHistory()
   await checkCapacitor()
   
   // Check web camera support
   if (!isCapacitor.value) {
     isCameraSupported.value = webCamera.isCameraSupported()
+    console.log('🌐 Web camera supported:', isCameraSupported.value)
   }
 })
 
@@ -51,11 +255,42 @@ async function checkCapacitor() {
       const { supported } = await BarcodeScanner.isSupported()
       if (supported) {
         isCapacitor.value = true
+        console.log('✅ Capacitor camera available')
       }
     } catch (error) {
       console.error('خطا در بارگذاری BarcodeScanner:', error)
     }
   }
+}
+
+// Parse QR Data (same format as admin)
+function parseQRData(qrData) {
+  let productData = null
+  
+  try {
+    // Try JSON format first
+    productData = JSON.parse(qrData)
+    console.log('Parsed as JSON:', productData)
+  } catch (e) {
+    // Try pipe-delimited format
+    console.log('Trying pipe-delimited format...')
+    const parts = qrData.split('|')
+    
+    if (parts.length >= 7) {
+      productData = {
+        product: parts[0] || '',
+        blend: parts[1] || '',
+        origin: parts[2] || '',
+        roastDate: parts[3] || '',
+        batchNumber: parts[4] || '',
+        packageWeight: parts[5] || '',
+        packageAmount: parseInt(parts[6]) || 0
+      }
+      console.log('Parsed pipe-delimited data:', productData)
+    }
+  }
+  
+  return productData
 }
 
 // Start Scan (Capacitor)
@@ -73,15 +308,12 @@ async function startScan() {
     }
 
     const scanResult = await BarcodeScanner.scan({
-      formats: []
+      formats: []  // Accept all formats
     })
 
     if (scanResult?.barcodes?.length > 0) {
-      const barcode = scanResult.barcodes[0]
-      await handleResult(
-        barcode.rawValue || barcode.displayValue,
-        formatType(barcode.format)
-      )
+      const qrData = scanResult.barcodes[0].rawValue || scanResult.barcodes[0].displayValue
+      await handleQRResult(qrData)
     } else {
       showMessage('کدی شناسایی نشد', 'info')
     }
@@ -111,7 +343,7 @@ async function startWebCameraScan() {
     const scannedCode = await webCamera.startScan(videoRef.value)
     
     if (scannedCode) {
-      await handleResult(scannedCode, detectBarcodeType(scannedCode))
+      await handleQRResult(scannedCode)
       stopWebCamera()
     } else {
       showMessage(webCamera.error.value || 'کدی شناسایی نشد', 'error')
@@ -129,125 +361,96 @@ function stopWebCamera() {
   showWebCamera.value = false
 }
 
-// Detect barcode type from content
-function detectBarcodeType(value) {
-  if (value.startsWith('http') || value.includes('://')) {
-    return 'QR CODE'
-  }
-  if (value.length >= 8 && value.length <= 14 && /^\d+$/.test(value)) {
-    return value.length === 13 ? 'EAN-13' : 'EAN-8'
-  }
-  return 'BARCODE'
-}
-
-// Submit Manual Code
-async function submitCode() {
-  const value = manualInput.value.trim()
-  if (!value) return
-
-  let type = 'BARCODE'
-  if (value.startsWith('http') || value.includes('://') || value.length > 50) {
-    type = 'QR CODE'
-  }
-
-  await handleResult(value, type)
-  clearInput()
-}
-
-// Handle Result
-async function handleResult(value, type) {
+// Handle QR Result
+async function handleQRResult(qrData) {
   try {
     isSaving.value = true
-    showMessage('در حال ذخیره...', 'info')
+    showMessage('در حال ثبت خروج...', 'info')
 
-    result.value = { value, type }
+    // Parse QR data
+    const productData = parseQRData(qrData)
+    
+    if (!productData) {
+      showMessage('فرمت QR نامعتبر است', 'error')
+      return
+    }
 
-    const item = {
+    // Validate required fields
+    const requiredFields = ['product', 'blend', 'origin', 'roastDate', 'batchNumber', 'packageWeight', 'packageAmount']
+    const missingFields = requiredFields.filter(field => !productData[field])
+    
+    if (missingFields.length > 0) {
+      showMessage(`فیلدهای ضروری خالی: ${missingFields.join(', ')}`, 'error')
+      return
+    }
+
+    // For cafe: Always deduct 6 packages (1 carton)
+    const deductionAmount = PACKAGES_PER_CARTON
+
+    // Get the correct sheet name (replace dots with underscores)
+    const sheetName = cafeName.value || user.value?.email?.split('@')[0].replace(/\./g, '_') || 'unknown'
+    console.log('📊 Using sheet name:', sheetName)
+
+    // Save to Google Sheets via API
+    const response = await fetch('/api/sheets/outbound', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sheetName: sheetName,
+        isAdmin: false,  // Cafe is doing the scan (negative amount)
+        data: {
+          'Product': productData.product,
+          'Blend': productData.blend,
+          'Origin': productData.origin,
+          'Roast-Date': productData.roastDate,
+          'Batch-Number': productData.batchNumber,
+          'Package-Weight': productData.packageWeight,
+          'Package-Amount': productData.packageAmount,
+          'cartoncount': 1,  // Always 1 carton for cafe
+          'offset': 0,  // No offset for cafe
+          'total-in-stock': deductionAmount,  // Will be negative in the sheet
+          'Timestamp': new Date().toISOString()
+        }
+      })
+    })
+
+    const currentTime = new Date().toLocaleTimeString('fa-IR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+
+    // Save to result and history
+    lastResult.value = productData
+
+    const historyItem = {
       id: Date.now(),
-      value,
-      type,
-      time: new Date().toLocaleTimeString('fa-IR', {
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
-      synced: false
+      product: productData.product,
+      blend: productData.blend,
+      time: currentTime,
+      synced: response.ok
     }
 
-    history.value.unshift(item)
-    if (history.value.length > 10) {
-      history.value = history.value.slice(0, 10)
-    }
-
-    const saveResult = await saveScan({ value, type })
-
-    if (saveResult.success) {
-      const historyItem = history.value.find(h => h.id === item.id)
-      if (historyItem) {
-        historyItem.synced = true
-      }
-      showMessage('اسکن با موفقیت ثبت شد', 'success')
-    } else {
-      showMessage(`خطا در ذخیره: ${saveResult.error}`, 'error')
+    history.value.unshift(historyItem)
+    if (history.value.length > 20) {
+      history.value = history.value.slice(0, 20)
     }
 
     saveHistory()
+
+    if (response.ok) {
+      showMessage(`✅ خروج 6 بسته ${productData.product} ثبت شد`, 'success')
+    } else {
+      showMessage(`خروج 6 بسته ثبت شد (آفلاین)`, 'warning')
+    }
+
   } catch (error) {
+    console.error('خطا در پردازش:', error)
     showMessage(`خطا در پردازش: ${error.message}`, 'error')
   } finally {
     isSaving.value = false
   }
-}
-
-// Format Type
-function formatType(format) {
-  const types = {
-    'QR_CODE': 'QR CODE',
-    'DATA_MATRIX': 'DATA MATRIX',
-    'EAN_13': 'EAN-13',
-    'EAN_8': 'EAN-8',
-    'UPC_A': 'UPC-A',
-    'UPC_E': 'UPC-E',
-    'CODE_128': 'CODE 128',
-    'CODE_39': 'CODE 39',
-    'ITF': 'ITF',
-    'PDF417': 'PDF417',
-    'AZTEC': 'AZTEC'
-  }
-  return types[format] || format || 'BARCODE'
-}
-
-// Copy Result
-async function copyResult() {
-  if (!result.value) return
-
-  try {
-    await navigator.clipboard.writeText(result.value.value)
-    showMessage('کد کپی شد', 'success')
-  } catch (err) {
-    const textarea = document.createElement('textarea')
-    textarea.value = result.value.value
-    textarea.style.position = 'fixed'
-    textarea.style.opacity = '0'
-    document.body.appendChild(textarea)
-    textarea.select()
-    // Using fallback copy method
-    document.body.removeChild(textarea)
-    showMessage('کد کپی شد', 'success')
-  }
-}
-
-// Clear Functions
-function clearInput() {
-  manualInput.value = ''
-}
-
-function clearResult() {
-  result.value = null
-}
-
-// Fill From History
-function fillFromHistory(value) {
-  manualInput.value = value
 }
 
 // Show Message
@@ -261,13 +464,15 @@ function showMessage(text, type) {
 // Storage
 function saveHistory() {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('scanHistory', JSON.stringify(history.value))
+    const today = new Date().toDateString()
+    localStorage.setItem(`cafe_scan_history_${today}`, JSON.stringify(history.value))
   }
 }
 
 function loadHistory() {
   if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('scanHistory')
+    const today = new Date().toDateString()
+    const saved = localStorage.getItem(`cafe_scan_history_${today}`)
     if (saved) {
       try {
         history.value = JSON.parse(saved)
@@ -277,253 +482,7 @@ function loadHistory() {
     }
   }
 }
-
-// Sync pending scans
-async function syncPendingScans() {
-  const pendingScans = history.value.filter(item => !item.synced)
-  
-  if (pendingScans.length === 0) {
-    showMessage('همه اسکن‌ها همگام‌سازی شده‌اند', 'info')
-    return
-  }
-  
-  for (const scan of pendingScans) {
-    try {
-      const result = await saveScan({ 
-        value: scan.value, 
-        type: scan.type 
-      })
-      
-      if (result.success) {
-        scan.synced = true
-      }
-    } catch (error) {
-      console.warn('خطا در sync:', error)
-    }
-  }
-  
-  saveHistory()
-  showMessage(`${pendingScans.filter(s => s.synced).length} از ${pendingScans.length} اسکن همگام‌سازی شد`, 'success')
-}
 </script>
-
-<template>
-  <div class="scanner-container">
-    <div class="scanner-card">
-      <!-- Header -->
-      <div class="header">
-        <div class="icon-container">
-          <svg viewBox="0 0 24 24" fill="none">
-            <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/>
-            <line x1="7" y1="7" x2="7" y2="17" stroke="currentColor" stroke-width="1.5"/>
-            <line x1="12" y1="7" x2="12" y2="17" stroke="currentColor" stroke-width="1.5"/>
-            <line x1="17" y1="7" x2="17" y2="17" stroke="currentColor" stroke-width="0.5"/>
-          </svg>
-        </div>
-        <h1>اسکنر بارکد</h1>
-        <p class="subtitle">کد را اسکن یا وارد کنید</p>
-      </div>
-
-      <!-- Message -->
-      <Transition name="fade">
-        <div v-if="message" :class="['message', `message-${message.type}`]">
-          {{ message.text }}
-        </div>
-      </Transition>
-
-      <!-- Main Form -->
-      <div class="form">
-        <!-- Camera Button (Capacitor) -->
-        <button
-          v-if="isCapacitor"
-          @click="startScan"
-          :disabled="isScanning || isSaving"
-          class="btn btn-primary btn-camera"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
-          <span v-if="!isScanning && !isSaving">اسکن با دوربین</span>
-          <span v-else-if="isScanning">
-            <span class="spinner"></span>
-            در حال اسکن...
-          </span>
-          <span v-else>
-            <span class="spinner"></span>
-            در حال ذخیره...
-          </span>
-        </button>
-
-        <!-- Web Camera Button -->
-        <button
-          v-if="!isCapacitor && isCameraSupported"
-          @click="startWebCameraScan"
-          :disabled="isScanning || isSaving"
-          class="btn btn-primary btn-camera"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
-          <span v-if="!isScanning && !isSaving">اسکن با دوربین</span>
-          <span v-else-if="isScanning">
-            <span class="spinner"></span>
-            در حال اسکن...
-          </span>
-          <span v-else>
-            <span class="spinner"></span>
-            در حال ذخیره...
-          </span>
-        </button>
-
-        <div v-if="isCapacitor || isCameraSupported" class="divider">
-          <span>یا</span>
-        </div>
-
-        <!-- Manual Input -->
-        <div class="input-group">
-          <label for="barcode" class="label">ورود دستی</label>
-          <div class="input-wrapper">
-            <input
-              id="barcode"
-              v-model="manualInput"
-              type="text"
-              placeholder="کد را وارد کنید"
-              @keyup.enter="submitCode"
-              :disabled="isSaving"
-              class="input-field"
-              autocomplete="off"
-            />
-            <button
-              v-if="manualInput"
-              @click="clearInput"
-              class="clear-btn"
-              type="button"
-              aria-label="پاک کردن"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Submit Button -->
-        <button
-          @click="submitCode"
-          :disabled="!manualInput || isSaving"
-          class="btn btn-primary"
-        >
-          <span v-if="!isSaving">ارسال</span>
-          <span v-else>
-            <span class="spinner"></span>
-            در حال ذخیره...
-          </span>
-        </button>
-      </div>
-
-      <!-- Web Camera Video -->
-      <Transition name="slide">
-        <div v-if="showWebCamera" class="camera-container">
-          <div class="camera-header">
-            <span>دوربین فعال</span>
-            <button @click="stopWebCamera" class="close-btn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-          <video
-            ref="videoRef"
-            autoplay
-            playsinline
-            class="camera-video"
-          ></video>
-          <div class="camera-overlay">
-            <div class="scan-frame"></div>
-            <p>کد بارکد یا QR کد را در کادر قرار دهید</p>
-          </div>
-        </div>
-      </Transition>
-
-      <!-- Result Box -->
-      <Transition name="slide">
-        <div v-if="result" class="result-box">
-          <div class="result-header">
-            <span class="result-label">نتیجه اسکن</span>
-            <span class="result-type">{{ result.type }}</span>
-          </div>
-          <div class="result-value">{{ result.value }}</div>
-          <div class="result-actions">
-            <button @click="copyResult" class="btn btn-secondary">کپی</button>
-            <button @click="clearResult" class="btn btn-secondary">پاک کردن</button>
-          </div>
-        </div>
-      </Transition>
-
-      <!-- History Section -->
-      <div v-if="history.length > 0" class="history">
-        <div class="history-header">
-          <span class="section-title">تاریخچه</span>
-          <button
-            v-if="history.some(h => !h.synced)"
-            @click="syncPendingScans"
-            class="sync-btn"
-            title="همگام‌سازی"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="1 4 1 10 7 10"/>
-              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-            </svg>
-            <span>{{ history.filter(h => !h.synced).length }}</span>
-          </button>
-        </div>
-        
-        <div class="history-list">
-          <TransitionGroup name="list">
-            <div
-              v-for="item in history"
-              :key="item.id"
-              @click="fillFromHistory(item.value)"
-              :class="['history-item', { 'not-synced': !item.synced }]"
-            >
-              <div class="history-value">{{ item.value }}</div>
-              <div class="history-meta">
-                <span>{{ item.time }}</span>
-                <span class="dot">•</span>
-                <span>{{ item.type }}</span>
-                <span v-if="!item.synced" class="sync-indicator">⚠</span>
-              </div>
-            </div>
-          </TransitionGroup>
-        </div>
-      </div>
-
-      <!-- Empty State -->
-      <div v-else class="empty-state">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <line x1="9" y1="9" x2="15" y2="15"/>
-          <line x1="15" y1="9" x2="9" y2="15"/>
-        </svg>
-        <p>هنوز اسکنی انجام نشده</p>
-      </div>
-
-      <!-- Footer -->
-      <div class="footer">
-        <NuxtLink to="/" class="btn btn-outline">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 18l-6-6 6-6"/>
-          </svg>
-          بازگشت به داشبورد
-        </NuxtLink>
-      </div>
-    </div>
-  </div>
-</template>
 
 <style scoped>
 /* Container - Dark Theme */
@@ -558,7 +517,7 @@ async function syncPendingScans() {
   background: #000;
   border-radius: 50%;
   border: 2px solid #555;
-  color: #ffffff;
+  color: #3b82f6;
 }
 
 h1 {
@@ -605,15 +564,15 @@ h1 {
 
 .input-field {
   width: 100%;
-  padding: 10px 40px 10px 14px;
+  padding: 12px 16px;
   border: 1px solid #555;
-  border-radius: 6px;
-  font-size: 14px;
+  border-radius: 8px;
+  font-size: 13px;
   transition: all 0.2s;
   background: #404040;
   color: #ffffff;
-  text-align: center;
   font-family: 'SF Mono', Monaco, monospace;
+  resize: vertical;
 }
 
 .input-field:focus {
@@ -623,35 +582,47 @@ h1 {
 }
 
 .input-field:disabled {
-  background: #2a2a2a;
+  background: #333;
   cursor: not-allowed;
   opacity: 0.6;
 }
 
 .input-field::placeholder {
-  color: #808080;
+  color: #666;
+  font-size: 11px;
 }
 
-.clear-btn {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: none;
-  cursor: pointer;
+.input-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #808080;
+  text-align: center;
+}
+
+/* Info Box */
+.info-box {
+  margin-top: 20px;
+  padding: 12px 16px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: #808080;
-  transition: color 0.2s;
-  padding: 0;
+  gap: 10px;
+  max-width: 280px;
 }
 
-.clear-btn:hover {
-  color: #ffffff;
+.info-box svg {
+  flex-shrink: 0;
+  color: #3b82f6;
+}
+
+.info-box p {
+  margin: 0;
+  font-size: 13px;
+  color: #3b82f6;
+  line-height: 1.4;
 }
 
 /* Buttons */
@@ -692,20 +663,6 @@ h1 {
   margin-bottom: 20px;
 }
 
-.btn-secondary {
-  background: #404040;
-  color: #ffffff;
-  border: 1px solid #555;
-  padding: 10px 16px;
-  font-size: 13px;
-}
-
-.btn-secondary:hover {
-  background: #484848;
-  border-color: #666;
-  transform: none;
-}
-
 .btn-outline {
   background: transparent;
   color: #b0b0b0;
@@ -729,6 +686,11 @@ h1 {
   border-top-color: #2a2a2a;
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
+}
+
+.btn-primary .spinner {
+  border-color: rgba(42,42,42,0.3);
+  border-top-color: #2a2a2a;
 }
 
 @keyframes spin {
@@ -794,10 +756,16 @@ h1 {
   border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
+.message-warning {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
 /* Result Box */
 .result-box {
   background: #333;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 20px;
   margin-bottom: 24px;
   border: 1px solid #444;
@@ -807,40 +775,51 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #444;
 }
 
 .result-label {
   font-size: 12px;
   color: #b0b0b0;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .result-type {
-  font-size: 10px;
-  padding: 4px 8px;
-  background: #000;
-  color: #fff;
-  border-radius: 4px;
-  text-transform: uppercase;
+  font-size: 13px;
+  padding: 4px 10px;
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  border-radius: 20px;
+  font-weight: 500;
 }
 
-.result-value {
-  font-family: 'SF Mono', Monaco, monospace;
-  font-size: 16px;
-  color: #ffffff;
-  word-break: break-all;
-  margin-bottom: 16px;
-  padding: 12px;
-  background: #2a2a2a;
-  border-radius: 4px;
-}
-
-.result-actions {
+.result-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.item-label {
+  font-size: 11px;
+  color: #808080;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.item-value {
+  font-size: 13px;
+  color: #ffffff;
+  font-weight: 500;
 }
 
 /* History */
@@ -865,22 +844,12 @@ h1 {
   color: #b0b0b0;
 }
 
-.sync-btn {
-  background: transparent;
-  border: 1px solid #3b82f6;
-  color: #3b82f6;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.2s;
-  font-size: 12px;
-}
-
-.sync-btn:hover {
-  background: rgba(59, 130, 246, 0.1);
+.history-count {
+  font-size: 11px;
+  padding: 4px 10px;
+  background: #404040;
+  color: #b0b0b0;
+  border-radius: 12px;
 }
 
 .history-list {
@@ -891,28 +860,34 @@ h1 {
 .history-item {
   padding: 12px;
   background: #333;
-  border-radius: 6px;
+  border-radius: 8px;
   margin-bottom: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
   border: 1px solid #444;
-}
-
-.history-item:hover {
-  background: #3a3a3a;
-  border-color: #555;
 }
 
 .history-item.not-synced {
   border-left: 3px solid #fbbf24;
 }
 
-.history-value {
+.history-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.history-product {
   font-size: 13px;
   color: #ffffff;
-  margin-bottom: 4px;
-  word-break: break-all;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-weight: 500;
+}
+
+.history-amount {
+  font-size: 12px;
+  padding: 2px 8px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  border-radius: 12px;
 }
 
 .history-meta {
@@ -920,23 +895,18 @@ h1 {
   color: #808080;
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-
-.history-meta .dot {
-  margin: 0 2px;
+  gap: 8px;
 }
 
 .sync-indicator {
   color: #fbbf24;
-  margin-right: 4px;
 }
 
 /* Empty State */
 .empty-state {
   text-align: center;
   padding: 48px 0;
-  color: #666;
+  color: #808080;
 }
 
 .empty-state svg {
@@ -952,90 +922,6 @@ h1 {
 .footer {
   text-align: center;
   margin-top: 24px;
-}
-
-/* Scrollbar */
-.history-list::-webkit-scrollbar {
-  width: 4px;
-}
-
-.history-list::-webkit-scrollbar-track {
-  background: #2a2a2a;
-}
-
-.history-list::-webkit-scrollbar-thumb {
-  background: #555;
-  border-radius: 2px;
-}
-
-.history-list::-webkit-scrollbar-thumb:hover {
-  background: #666;
-}
-
-/* Transitions */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-.slide-enter-active,
-.slide-leave-active {
-  transition: all 0.3s;
-}
-
-.slide-enter-from {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-
-.slide-leave-to {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-.list-enter-active,
-.list-leave-active {
-  transition: all 0.3s;
-}
-
-.list-enter-from {
-  opacity: 0;
-  transform: translateX(-10px);
-}
-
-.list-leave-to {
-  opacity: 0;
-  transform: translateX(10px);
-}
-
-/* Mobile */
-@media (max-width: 480px) {
-  .scanner-card {
-    padding: 32px 24px;
-  }
-
-  h1 {
-    font-size: 28px;
-  }
-
-  .icon-container {
-    width: 70px;
-    height: 70px;
-  }
-
-  .history-list {
-    max-height: 150px;
-  }
-
-  .btn {
-    padding: 10px 16px;
-    font-size: 13px;
-  }
 }
 
 /* Camera Styles */
@@ -1109,7 +995,7 @@ h1 {
   position: absolute;
   width: 20px;
   height: 20px;
-  border: 3px solid #22c55e;
+  border: 3px solid #3b82f6;
 }
 
 .scan-frame::before {
@@ -1136,14 +1022,92 @@ h1 {
   margin: 0;
 }
 
+/* Scrollbar */
+.history-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.history-list::-webkit-scrollbar-track {
+  background: #333;
+}
+
+.history-list::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 2px;
+}
+
+.history-list::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+/* Transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-enter-active,
+.slide-leave-active {
+  transition: all 0.3s;
+}
+
+.slide-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.slide-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.3s;
+}
+
+.list-enter-from {
+  opacity: 0;
+  transform: translateX(-10px);
+}
+
+.list-leave-to {
+  opacity: 0;
+  transform: translateX(10px);
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .scanner-card {
+    padding: 32px 24px;
+  }
+
+  h1 {
+    font-size: 28px;
+  }
+
+  .icon-container {
+    width: 70px;
+    height: 70px;
+  }
+
+  .history-list {
+    max-height: 150px;
+  }
+
+  .result-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* RTL Support */
 [dir="rtl"] .history-item.not-synced {
   border-left: none;
   border-right: 3px solid #fbbf24;
-}
-
-[dir="rtl"] .sync-indicator {
-  margin-right: 0;
-  margin-left: 4px;
 }
 </style>

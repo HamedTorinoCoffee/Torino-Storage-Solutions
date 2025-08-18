@@ -118,7 +118,7 @@ const config = useRuntimeConfig()
 const adminEmail = config.public.firstAdminEmail || ''
 
 // Redirect path - default based on user type
-const redirectTo = ref('/dashboard')
+const redirectTo = ref('/user-dashboard')
 
 onMounted(() => {
   const redirect = route.query.redirect
@@ -174,7 +174,7 @@ const handleSubmit = async () => {
       } else {
         console.log('📍 Redirecting to user dashboard')
         // اگر redirect query param داشتیم از اون استفاده کن، وگرنه به dashboard برو
-        await navigateTo(redirectTo.value || '/dashboard')  // ✅ تغییر به dashboard
+        await navigateTo(redirectTo.value || '/user-dashboard')  // ✅ تغییر به صفحه کاربر
       }
     } else {
       console.error('❌ Login failed:', result.error)

@@ -16,6 +16,18 @@
         <p class="subtitle">ثبت خروج و تحویل به مشتریان</p>
       </div>
 
+      <!-- Debug Info (only in development) -->
+      <div v-if="debugInfo" class="debug-box">
+        <h4>Debug Info:</h4>
+        <pre>{{ JSON.stringify(debugInfo, null, 2) }}</pre>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="isLoadingSheets" class="loading-state">
+        <span class="spinner"></span>
+        <p>در حال بارگذاری لیست کافه‌ها...</p>
+      </div>
+
       <!-- Message -->
       <Transition name="fade">
         <div v-if="message" :class="['message', `message-${message.type}`]">
@@ -24,7 +36,7 @@
       </Transition>
 
       <!-- Cafe Selection -->
-      <div class="cafe-selection">
+      <div v-if="!isLoadingSheets" class="cafe-selection">
         <label class="label">انتخاب کافه/مشتری</label>
         <div class="select-wrapper">
           <select 
@@ -36,9 +48,9 @@
             <option 
               v-for="cafe in cafes" 
               :key="cafe.id"
-              :value="cafe.email"
+              :value="cafe.name"
             >
-              {{ cafe.user_metadata?.full_name || cafe.email }}
+              {{ cafe.name }}
             </option>
           </select>
           <div class="select-icon">
@@ -47,13 +59,24 @@
             </svg>
           </div>
         </div>
+        <button @click="refreshSheetsList" class="btn-refresh" :disabled="isLoadingSheets">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3m2 5.3a10 10 0 01-18.8 4.2"/>
+          </svg>
+          بازخوانی لیست
+        </button>
+        
+        <!-- Show count of cafes -->
+        <div v-if="cafes.length > 0" class="cafe-count">
+          تعداد کافه‌ها: {{ cafes.length }}
+        </div>
       </div>
 
       <!-- Main Form -->
       <div v-if="selectedCafe" class="form">
-        <!-- Camera Button (if Capacitor) -->
+        <!-- Camera Button (works for both Capacitor and Web) -->
         <button
-          v-if="isCapacitor"
+          v-if="isCameraAvailable"
           @click="startScan"
           :disabled="isScanning || isSaving"
           class="btn btn-primary btn-camera"
@@ -73,7 +96,23 @@
           </span>
         </button>
 
-        <div v-if="isCapacitor" class="divider">
+        <!-- QR Scanner Video Container (for Web) -->
+        <div v-show="!isCapacitor && showScanner" id="qr-reader" style="width: 100%; max-width: 400px; margin: 0 auto 20px;"></div>
+        
+        <!-- Stop Scanner Button (shown when scanning) -->
+        <button
+          v-if="!isCapacitor && showScanner"
+          @click="stopWebScanner()"
+          class="btn btn-outline"
+          style="margin-bottom: 20px;"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="4" y="4" width="16" height="16"/>
+          </svg>
+          توقف اسکن
+        </button>
+
+        <div v-if="isCameraAvailable" class="divider">
           <span>یا</span>
         </div>
 
@@ -84,20 +123,62 @@
             <textarea
               id="qrcode"
               v-model="manualInput"
-              placeholder='{"blend":"Arabica 100%","origin":"Colombia","roastDate":"2024-12-20","batch":"B-2024-001","weight":"1kg","amount":10}'
+              placeholder='فرمت Pipe: arabica|40-40-50|bra-col-eth|2025-10-08|25081110001|1 kg|6'
               @keyup.enter.ctrl="submitCode"
               :disabled="isSaving"
               class="input-field"
               rows="3"
             />
           </div>
-          <small class="input-hint">JSON فرمت - Ctrl+Enter برای ارسال</small>
+          <small class="input-hint">فرمت: product|blend|origin|roastDate|batchNumber|packageWeight|packageAmount</small>
+        </div>
+
+        <!-- Carton Count Input -->
+        <div class="input-group">
+          <label for="cartonCount" class="label">تعداد کارتن</label>
+          <div class="input-wrapper">
+            <input
+              id="cartonCount"
+              v-model.number="cartonCountInput"
+              type="number"
+              min="0"
+              placeholder="مثال: 5"
+              :disabled="isSaving"
+              class="input-field number-input"
+            />
+          </div>
+          <small class="input-hint">تعداد کارتن برای تحویل</small>
+        </div>
+
+        <!-- Offset Input -->
+        <div class="input-group offset-group">
+          <label for="offset" class="label">تعداد آفست</label>
+          <div class="select-wrapper">
+            <select 
+              id="offset"
+              v-model="selectedOffset" 
+              class="select-field"
+              :disabled="isSaving"
+            >
+              <option :value="0">بدون آفست</option>
+              <option :value="1">1 عدد</option>
+              <option :value="2">2 عدد</option>
+              <option :value="3">3 عدد</option>
+              <option :value="4">4 عدد</option>
+              <option :value="5">5 عدد</option>
+            </select>
+            <div class="select-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </div>
+          </div>
         </div>
 
         <!-- Submit Button -->
         <button
           @click="submitCode"
-          :disabled="!manualInput || isSaving"
+          :disabled="!manualInput || isSaving || cartonCountInput === null || cartonCountInput === ''"
           class="btn btn-primary"
         >
           <span v-if="!isSaving">ثبت خروج</span>
@@ -109,7 +190,7 @@
       </div>
 
       <!-- Select Cafe Message -->
-      <div v-else class="empty-state">
+      <div v-else-if="!isLoadingSheets" class="empty-state">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
           <circle cx="9" cy="7" r="4"/>
@@ -117,6 +198,9 @@
           <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
         <p>لطفاً ابتدا کافه مورد نظر را انتخاب کنید</p>
+        <p v-if="cafes.length === 0" class="error-text">
+          هیچ کافه‌ای یافت نشد. لطفاً اتصال به Google Sheets را بررسی کنید.
+        </p>
       </div>
 
       <!-- Last Scan Result -->
@@ -127,6 +211,10 @@
             <span class="result-cafe">{{ lastResult.cafe }}</span>
           </div>
           <div class="result-grid">
+            <div class="result-item">
+              <span class="item-label">محصول:</span>
+              <span class="item-value">{{ lastResult.data.product }}</span>
+            </div>
             <div class="result-item">
               <span class="item-label">ترکیب:</span>
               <span class="item-value">{{ lastResult.data.blend }}</span>
@@ -141,15 +229,15 @@
             </div>
             <div class="result-item">
               <span class="item-label">شماره بچ:</span>
-              <span class="item-value">{{ lastResult.data.batch }}</span>
+              <span class="item-value">{{ lastResult.data.batchNumber }}</span>
             </div>
             <div class="result-item">
               <span class="item-label">وزن:</span>
-              <span class="item-value">{{ lastResult.data.weight }}</span>
+              <span class="item-value">{{ lastResult.data.packageWeight }}</span>
             </div>
             <div class="result-item">
-              <span class="item-label">تعداد:</span>
-              <span class="item-value">{{ lastResult.data.amount }}</span>
+              <span class="item-label">تعداد کل:</span>
+              <span class="item-value">{{ lastResult.totalDelivered }}</span>
             </div>
           </div>
         </div>
@@ -170,9 +258,9 @@
           >
             <div class="summary-cafe">{{ item.cafe }}</div>
             <div class="summary-details">
-              <span>{{ item.blend }}</span>
+              <span>{{ item.product }} - {{ item.blend }}</span>
               <span class="dot">•</span>
-              <span>{{ item.amount }} بسته</span>
+              <span>{{ item.amount }} عدد</span>
               <span class="dot">•</span>
               <span>{{ item.time }}</span>
             </div>
@@ -194,12 +282,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from '~/composables/useAuth'
-import { navigateTo } from '#app'
 
-console.log('📦 Outbound page is loading!')
+console.log('🚚 Outbound page is loading!')
 
 // Auth
 const { user } = useAuth()
@@ -210,19 +297,26 @@ const adminEmail = config.public.firstAdminEmail || ''
 
 // State
 const isCapacitor = ref(false)
+const isCameraAvailable = ref(false)
 const isScanning = ref(false)
 const isSaving = ref(false)
 const isLoading = ref(false)
+const isLoadingSheets = ref(false)
 const manualInput = ref('')
+const cartonCountInput = ref(null)
+const selectedOffset = ref(0)
 const message = ref(null)
 const lastResult = ref(null)
 const todaySummary = ref([])
+const showScanner = ref(false)
+const debugInfo = ref(null)
 
 // Cafe Selection
 const cafes = ref([])
 const selectedCafe = ref('')
 
 let BarcodeScanner = null
+let html5QrCode = null
 
 // Lifecycle
 onMounted(async () => {
@@ -230,89 +324,246 @@ onMounted(async () => {
   console.log('👤 User:', user.value)
   console.log('📧 Admin email:', adminEmail)
   
-  // ✅ احراز هویت موقتاً غیرفعال شده
-  /*
-  if (!user.value || user.value.email !== adminEmail) {
-    console.log('❌ Not admin, redirecting to login')
-    await navigateTo('/login')
-    return
-  }
-  */
-  
   console.log('✅ Admin access granted (auth temporarily disabled)')
   
-  // Load cafes - موقتاً با داده‌های ثابت
-  await loadCafes()
+  // Load cafes from Google Sheets
+  await loadCafesFromSheets()
   
-  // Check Capacitor
-  await checkCapacitor()
+  // Check for camera availability
+  await checkCameraAvailability()
+  
+  // Load Html5Qrcode library for web
+  if (!isCapacitor.value && process.client) {
+    await loadHtml5Qrcode()
+  }
   
   // Load today's summary
   loadTodaySummary()
 })
 
-// Load Cafes - با داده‌های ثابت برای تست
-async function loadCafes() {
-  isLoading.value = true
+// Load Cafes from Google Sheets
+async function loadCafesFromSheets() {
+  isLoadingSheets.value = true
   try {
-    // لیست ثابت کافه‌ها برای تست
-    cafes.value = [
-      { 
-        id: '1', 
-        email: 'cafe1@example.com', 
-        user_metadata: { full_name: 'کافه آرامش' } 
-      },
-      { 
-        id: '2', 
-        email: 'cafe2@example.com', 
-        user_metadata: { full_name: 'کافه صبح' } 
-      },
-      { 
-        id: '3', 
-        email: 'cafe3@example.com', 
-        user_metadata: { full_name: 'کافه هنر' } 
-      },
-      { 
-        id: '4', 
-        email: 'cafe4@example.com', 
-        user_metadata: { full_name: 'کافه دوستی' } 
-      }
-    ]
+    console.log('🔄 Fetching sheets list from API...')
+    const response = await fetch('/api/sheets/list')
     
-    console.log('☕ Loaded cafes:', cafes.value.length)
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('❌ API returned error:', response.status, errorText)
+      throw new Error(`API Error: ${response.status} - ${errorText}`)
+    }
+    
+    const data = await response.json()
+    console.log('📦 API Response:', data)
+    
+    // Set debug info in development
+    if (data.debug) {
+      debugInfo.value = data.debug
+      console.log('🐛 Debug info:', data.debug)
+    }
+    
+    cafes.value = data.sheets || []
+    console.log('☕ Loaded cafes from sheets:', cafes.value)
+    console.log('📊 Number of cafes:', cafes.value.length)
+    
+    if (cafes.value.length === 0) {
+      showMessage('هیچ کافه‌ای در سیستم یافت نشد. لطفاً Google Sheet را بررسی کنید.', 'warning')
+      console.warn('⚠️ No cafes found in the response')
+    } else {
+      console.log('✅ Cafes loaded successfully:', cafes.value.map(c => c.name).join(', '))
+    }
   } catch (error) {
-    console.error('Error loading cafes:', error)
-    showMessage('خطا در بارگذاری لیست کافه‌ها', 'error')
+    console.error('❌ Error loading cafes:', error)
+    showMessage(`خطا در بارگذاری لیست کافه‌ها: ${error.message}`, 'error')
+    
+    // Set empty array on error
+    cafes.value = []
+    
+    // Show debug info
+    debugInfo.value = {
+      error: error.message,
+      stack: error.stack
+    }
   } finally {
-    isLoading.value = false
+    isLoadingSheets.value = false
   }
 }
 
-// Check Capacitor
-async function checkCapacitor() {
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const module = await import('@capacitor-mlkit/barcode-scanning')
-      BarcodeScanner = module.BarcodeScanner
-      
-      const { supported } = await BarcodeScanner.isSupported()
-      if (supported) {
-        isCapacitor.value = true
+// Refresh sheets list
+async function refreshSheetsList() {
+  selectedCafe.value = ''
+  debugInfo.value = null
+  await loadCafesFromSheets()
+  if (cafes.value.length > 0) {
+    showMessage(`لیست کافه‌ها بازخوانی شد (${cafes.value.length} کافه)`, 'success')
+  }
+}
+
+// Load Html5Qrcode library
+async function loadHtml5Qrcode() {
+  try {
+    const { Html5Qrcode } = await import('html5-qrcode')
+    html5QrCode = Html5Qrcode
+    console.log('✅ Html5Qrcode library loaded')
+  } catch (error) {
+    console.error('Error loading Html5Qrcode:', error)
+    if (typeof window !== 'undefined' && !window.Html5Qrcode) {
+      const script = document.createElement('script')
+      script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'
+      script.onload = () => {
+        html5QrCode = window.Html5Qrcode
+        console.log('✅ Html5Qrcode loaded from CDN')
       }
-    } catch (error) {
-      console.error('خطا در بارگذاری BarcodeScanner:', error)
+      document.head.appendChild(script)
     }
+  }
+}
+
+// Check Camera Availability
+async function checkCameraAvailability() {
+  if (Capacitor.isNativePlatform()) {
+    console.log('📱 Native platform detected')
+    isCapacitor.value = true
+    await checkCapacitorCamera()
+  } else {
+    console.log('🌐 Web platform detected')
+    isCapacitor.value = false
+    await checkWebCamera()
+  }
+}
+
+// Check Capacitor Camera
+async function checkCapacitorCamera() {
+  try {
+    const module = await import('@capacitor-mlkit/barcode-scanning')
+    BarcodeScanner = module.BarcodeScanner
+    
+    const { supported } = await BarcodeScanner.isSupported()
+    if (supported) {
+      isCameraAvailable.value = true
+      console.log('✅ Capacitor camera available')
+    }
+  } catch (error) {
+    console.error('خطا در بارگذاری BarcodeScanner:', error)
+    isCameraAvailable.value = false
+  }
+}
+
+// Check Web Camera
+async function checkWebCamera() {
+  try {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      isCameraAvailable.value = true
+      console.log('✅ Web camera API available')
+    } else {
+      isCameraAvailable.value = false
+      console.log('❌ Camera API not supported')
+    }
+  } catch (error) {
+    console.error('Error checking web camera:', error)
+    isCameraAvailable.value = false
+  }
+}
+
+// Start Web Scanner
+async function startWebScanner() {
+  if (!html5QrCode) {
+    showMessage('کتابخانه اسکنر در حال بارگذاری است...', 'info')
+    setTimeout(() => startWebScanner(), 1000)
+    return
+  }
+
+  try {
+    showScanner.value = true
+    isScanning.value = true
+    
+    await nextTick()
+    
+    setTimeout(async () => {
+      try {
+        const scanner = new html5QrCode("qr-reader")
+        
+        const config = {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+          rememberLastUsedCamera: true,
+          supportedScanTypes: [0]
+        }
+        
+        await scanner.start(
+          { facingMode: "environment" },
+          config,
+          async (decodedText) => {
+            console.log('QR Code detected:', decodedText)
+            manualInput.value = decodedText
+            await stopWebScanner(scanner)
+            showMessage('کد QR با موفقیت اسکن شد', 'success')
+          },
+          (errorMessage) => {
+            // Normal during scanning
+          }
+        ).catch((err) => {
+          console.error('Error starting scanner:', err)
+          showMessage('خطا در راه‌اندازی دوربین', 'error')
+          stopWebScanner(scanner)
+        })
+        
+        window.currentScanner = scanner
+        
+      } catch (error) {
+        console.error('Scanner initialization error:', error)
+        showMessage('خطا در راه‌اندازی اسکنر', 'error')
+        isScanning.value = false
+        showScanner.value = false
+      }
+    }, 100)
+    
+  } catch (error) {
+    console.error('Scanner error:', error)
+    showMessage('خطا در اسکن QR', 'error')
+    isScanning.value = false
+    showScanner.value = false
+  }
+}
+
+// Stop Web Scanner
+async function stopWebScanner(scanner = null) {
+  try {
+    const activeScanner = scanner || window.currentScanner
+    if (activeScanner) {
+      await activeScanner.stop()
+      activeScanner.clear()
+      window.currentScanner = null
+    }
+  } catch (error) {
+    console.error('Error stopping scanner:', error)
+  } finally {
+    isScanning.value = false
+    showScanner.value = false
   }
 }
 
 // Start Scan
 async function startScan() {
-  if (!BarcodeScanner || isScanning.value) return
-  
   if (!selectedCafe.value) {
     showMessage('لطفاً ابتدا کافه را انتخاب کنید', 'error')
     return
   }
+
+  // Web scanner
+  if (!isCapacitor.value) {
+    if (showScanner.value) {
+      await stopWebScanner()
+    } else {
+      await startWebScanner()
+    }
+    return
+  }
+
+  // Capacitor scanner
+  if (!BarcodeScanner || isScanning.value) return
 
   try {
     isScanning.value = true
@@ -330,7 +581,8 @@ async function startScan() {
 
     if (scanResult?.barcodes?.length > 0) {
       const qrData = scanResult.barcodes[0].rawValue || scanResult.barcodes[0].displayValue
-      await handleResult(qrData)
+      manualInput.value = qrData
+      showMessage('کد QR با موفقیت اسکن شد', 'success')
     } else {
       showMessage('کدی شناسایی نشد', 'info')
     }
@@ -351,8 +603,42 @@ async function submitCode() {
     return
   }
 
+  if (cartonCountInput.value === null || cartonCountInput.value === '' || cartonCountInput.value < 0) {
+    showMessage('لطفاً تعداد کارتن را وارد کنید', 'error')
+    return
+  }
+
   await handleResult(value)
-  clearInput()
+}
+
+// Parse QR Data (same as inventory)
+function parseQRData(qrData) {
+  let productData = null
+  
+  try {
+    // Try JSON format first
+    productData = JSON.parse(qrData)
+    console.log('Parsed as JSON:', productData)
+  } catch (e) {
+    // Try pipe-delimited format
+    console.log('Trying pipe-delimited format...')
+    const parts = qrData.split('|')
+    
+    if (parts.length >= 7) {
+      productData = {
+        product: parts[0] || '',
+        blend: parts[1] || '',
+        origin: parts[2] || '',
+        roastDate: parts[3] || '',
+        batchNumber: parts[4] || '',
+        packageWeight: parts[5] || '',
+        packageAmount: parseInt(parts[6]) || 0
+      }
+      console.log('Parsed pipe-delimited data:', productData)
+    }
+  }
+  
+  return productData
 }
 
 // Handle Result
@@ -362,26 +648,28 @@ async function handleResult(qrData) {
     showMessage('در حال ثبت خروج...', 'info')
 
     // Parse QR data
-    let productData
-    try {
-      productData = JSON.parse(qrData)
-    } catch (e) {
+    const productData = parseQRData(qrData)
+    
+    if (!productData) {
       showMessage('فرمت QR نامعتبر است', 'error')
       return
     }
 
+    // Add user input data
+    productData.cartonCount = Number(cartonCountInput.value)
+    productData.offset = selectedOffset.value
+    productData.packageAmount = parseInt(productData.packageAmount) || 0
+
     // Validate required fields
-    const requiredFields = ['blend', 'origin', 'roastDate', 'batch', 'weight', 'amount']
+    const requiredFields = ['product', 'blend', 'origin', 'roastDate', 'batchNumber', 'packageWeight', 'packageAmount']
     const missingFields = requiredFields.filter(field => !productData[field])
     
     if (missingFields.length > 0) {
-      showMessage(`فیلدهای ضروری: ${missingFields.join(', ')}`, 'error')
+      showMessage(`فیلدهای ضروری خالی: ${missingFields.join(', ')}`, 'error')
       return
     }
 
-    // Get cafe name
-    const cafe = cafes.value.find(c => c.email === selectedCafe.value)
-    const cafeName = cafe?.user_metadata?.full_name || cafe?.email || selectedCafe.value
+    const totalAmount = (productData.cartonCount * productData.packageAmount) + (productData.offset || 0)
 
     // Save to Google Sheets via API
     const response = await fetch('/api/sheets/outbound', {
@@ -391,64 +679,80 @@ async function handleResult(qrData) {
       },
       body: JSON.stringify({
         sheetName: selectedCafe.value,
+        isAdmin: true,  // Admin is doing the scan (positive amount)
         data: {
-          'Type': 'ورود',
-          'ProductBlend': productData.blend,
+          'Product': productData.product,
+          'Blend': productData.blend,
           'Origin': productData.origin,
           'Roast-Date': productData.roastDate,
-          'Batch-Number': productData.batch,
-          'Package-Weight': productData.weight,
-          'Package-Amount': Math.abs(productData.amount),
+          'Batch-Number': productData.batchNumber,
+          'Package-Weight': productData.packageWeight,
+          'Package-Amount': productData.packageAmount,
+          'cartoncount': productData.cartonCount,
+          'offset': productData.offset || 0,
+          'total-in-stock': totalAmount,
           'Timestamp': new Date().toISOString()
         }
       })
     })
 
+    const currentTime = new Date().toLocaleTimeString('fa-IR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+
     if (response.ok) {
       // Save to last result
       lastResult.value = {
-        cafe: cafeName,
+        cafe: selectedCafe.value,
         data: productData,
-        time: new Date().toLocaleTimeString('fa-IR')
+        totalDelivered: totalAmount,
+        time: currentTime
       }
 
       // Add to today's summary
       todaySummary.value.unshift({
-        cafe: cafeName,
+        cafe: selectedCafe.value,
+        product: productData.product,
         blend: productData.blend,
-        amount: productData.amount,
-        time: new Date().toLocaleTimeString('fa-IR', {
-          hour: '2-digit',
-          minute: '2-digit'
-        })
+        amount: totalAmount,
+        time: currentTime
       })
 
       // Save to localStorage
       saveTodaySummary()
 
-      showMessage(`خروج برای ${cafeName} با موفقیت ثبت شد`, 'success')
-    } else {
-      // برای تست، حتی بدون API کار کنه
-      const currentTime = new Date().toLocaleTimeString('fa-IR', {
-        hour: '2-digit',
-        minute: '2-digit'
-      })
+      // Clear inputs
+      manualInput.value = ''
+      cartonCountInput.value = null
+      selectedOffset.value = 0
 
+      showMessage(`✅ خروج ${totalAmount} عدد ${productData.product} برای ${selectedCafe.value} ثبت شد`, 'success')
+    } else {
+      // Fallback to offline mode
       lastResult.value = {
-        cafe: cafeName,
+        cafe: selectedCafe.value,
         data: productData,
-        time: new Date().toLocaleTimeString('fa-IR')
+        totalDelivered: totalAmount,
+        time: currentTime
       }
 
       todaySummary.value.unshift({
-        cafe: cafeName,
+        cafe: selectedCafe.value,
+        product: productData.product,
         blend: productData.blend,
-        amount: productData.amount,
+        amount: totalAmount,
         time: currentTime
       })
 
       saveTodaySummary()
-      showMessage(`خروج برای ${cafeName} ثبت شد (آفلاین)`, 'info')
+      
+      // Clear inputs
+      manualInput.value = ''
+      cartonCountInput.value = null
+      selectedOffset.value = 0
+      
+      showMessage(`خروج برای ${selectedCafe.value} ثبت شد (آفلاین)`, 'info')
     }
 
   } catch (error) {
@@ -457,11 +761,6 @@ async function handleResult(qrData) {
   } finally {
     isSaving.value = false
   }
-}
-
-// Clear Input
-function clearInput() {
-  manualInput.value = ''
 }
 
 // Show Message
@@ -496,7 +795,7 @@ function loadTodaySummary() {
 </script>
 
 <style scoped>
-/* Container - ذغالی تیره */
+/* Container */
 .outbound-container {
   min-height: 100vh;
   background: #2a2a2a;
@@ -510,6 +809,29 @@ function loadTodaySummary() {
   width: 100%;
   max-width: 500px;
   padding: 40px 32px;
+}
+
+/* Debug Box */
+.debug-box {
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 20px;
+  font-size: 11px;
+  color: #888;
+}
+
+.debug-box h4 {
+  margin: 0 0 8px 0;
+  color: #aaa;
+  font-size: 12px;
+}
+
+.debug-box pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 /* Header */
@@ -542,6 +864,17 @@ h1 {
 .subtitle {
   color: #b0b0b0;
   font-size: 14px;
+}
+
+/* Loading State */
+.loading-state {
+  text-align: center;
+  padding: 40px 0;
+  color: #808080;
+}
+
+.loading-state .spinner {
+  margin-bottom: 16px;
 }
 
 /* Cafe Selection */
@@ -598,6 +931,39 @@ h1 {
   color: #808080;
 }
 
+.btn-refresh {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid #555;
+  border-radius: 6px;
+  color: #b0b0b0;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.btn-refresh:hover:not(:disabled) {
+  background: #404040;
+  color: #ffffff;
+  border-color: #666;
+}
+
+.btn-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cafe-count {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #22c55e;
+  text-align: center;
+}
+
 /* Form */
 .form {
   margin-bottom: 32px;
@@ -609,6 +975,10 @@ h1 {
 .input-group {
   width: 100%;
   margin-bottom: 16px;
+}
+
+.offset-group {
+  max-width: 280px;
 }
 
 .input-wrapper {
@@ -626,6 +996,26 @@ h1 {
   color: #ffffff;
   font-family: 'SF Mono', Monaco, monospace;
   resize: vertical;
+}
+
+.number-input {
+  text-align: center;
+  max-width: 280px;
+  margin: 0 auto;
+  display: block;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.number-input::-webkit-outer-spin-button,
+.number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.number-input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .input-field:focus {
@@ -715,6 +1105,11 @@ h1 {
   animation: spin 0.6s linear infinite;
 }
 
+.btn-primary .spinner {
+  border-color: rgba(42,42,42,0.3);
+  border-top-color: #2a2a2a;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -773,6 +1168,12 @@ h1 {
   background: rgba(59, 130, 246, 0.1);
   color: #3b82f6;
   border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.message-warning {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
 }
 
 /* Result Box */
@@ -911,6 +1312,12 @@ h1 {
 
 .empty-state p {
   font-size: 14px;
+}
+
+.empty-state .error-text {
+  color: #fbbf24;
+  margin-top: 12px;
+  font-size: 12px;
 }
 
 /* Footer */

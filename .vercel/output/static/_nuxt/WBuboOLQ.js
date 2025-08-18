@@ -1,0 +1,1 @@
+import{p as o,c as e,o as a,a as n,t as i,B as c}from"./CKiwDKMb.js";const l={class:"p-8"},u={__name:"test-config",setup(m){const s=o().public.firstAdminEmail;return console.log("Admin Email:",s),(p,t)=>(a(),e("div",l,[t[0]||(t[0]=n("h1",{class:"text-2xl mb-4"},"تست تنظیمات",-1)),n("p",null,"ایمیل ادمین: "+i(c(s)),1)]))}};export{u as default};

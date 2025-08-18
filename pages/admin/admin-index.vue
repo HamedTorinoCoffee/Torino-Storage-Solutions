@@ -260,7 +260,7 @@ function loadStats() {
 
 // Navigation
 function goToDashboard() {
-  navigateTo('/dashboard')
+  navigateTo('/user-dashboard')
 }
 
 // Actions

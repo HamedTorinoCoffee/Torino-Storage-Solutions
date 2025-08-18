@@ -25,7 +25,7 @@ export default defineNuxtRouteMiddleware((to, from) => {
 
   // اگر کاربر لاگین کرده و در صفحات عمومی است
   if (user.value && publicRoutes.includes(to.path)) {
-    return navigateTo('/')
+    return navigateTo('/user-dashboard')
   }
 
   // موقتاً بررسی approval را غیرفعال می‌کنیم چون همه approved هستند

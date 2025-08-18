@@ -9,6 +9,6 @@ export default defineNuxtRouteMiddleware(() => {
 
   // اگر کاربر لاگین کرده و در صفحه لاگین است، به صفحه اصلی برود
 //  if (user.value && to.path === '/login') {
-   // return navigateTo('/')
+   // return navigateTo('/user-dashboard')
  // }
 })

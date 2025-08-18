@@ -37,9 +37,9 @@
 
       <!-- Main Form -->
       <div class="form">
-        <!-- Camera Button (if Capacitor) -->
+        <!-- Camera Button (works for both Capacitor and Web) -->
         <button
-          v-if="isCapacitor"
+          v-if="isCameraAvailable"
           @click="startScan"
           :disabled="isScanning || isSaving"
           class="btn btn-primary btn-camera"
@@ -59,18 +59,36 @@
           </span>
         </button>
 
-        <div v-if="isCapacitor" class="divider">
+        <!-- QR Scanner Video Container (for Web) -->
+        <div v-show="!isCapacitor && showScanner" id="qr-reader" style="width: 100%; max-width: 400px; margin: 0 auto 20px;"></div>
+        
+        <!-- Stop Scanner Button (shown when scanning) -->
+        <button
+          v-if="!isCapacitor && showScanner"
+          @click="stopWebScanner()"
+          class="btn btn-outline"
+          style="margin-bottom: 20px;"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="4" y="4" width="16" height="16"/>
+          </svg>
+          توقف اسکن
+        </button>
+
+        <div v-if="isCameraAvailable" class="divider">
           <span>یا</span>
         </div>
 
         <!-- Manual Input -->
         <div class="input-group">
-          <label for="qrcode" class="label">ورود دستی اطلاعات محصول (JSON)</label>
+          <label for="qrcode" class="label">ورود دستی اطلاعات محصول (JSON یا Pipe-delimited)</label>
           <div class="input-wrapper">
             <textarea
               id="qrcode"
               v-model="manualInput"
-              placeholder='{"product":"Coffee","blend":"Arabica 100%","origin":"Colombia","roastDate":"2024-12-20","batchNumber":"B-2024-001","packageWeight":"1kg","packageAmount":10}'
+              placeholder='JSON: {"product":"Coffee","blend":"Arabica 100%",...}
+یا
+Pipe: arabica|40-40-50|bra-col-eth|2025-10-08|25081110001|1 kg|6'
               @keyup.enter.ctrl="submitCode"
               :disabled="isSaving"
               class="input-field"
@@ -235,7 +253,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, onUnmounted, nextTick } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from '~/composables/useAuth'
 
@@ -250,17 +268,20 @@ const adminEmail = config.public.firstAdminEmail || ''
 
 // State
 const isCapacitor = ref(false)
+const isCameraAvailable = ref(false)
 const isScanning = ref(false)
 const isSaving = ref(false)
 const manualInput = ref('')
-const cartonCountInput = ref(null) // فیلد ورودی تعداد کارتن
-const selectedOffset = ref(0) // آفست انتخاب شده
+const cartonCountInput = ref(null)
+const selectedOffset = ref(0)
 const message = ref(null)
 const lastResult = ref(null)
 const todayInventory = ref([])
 const lastScanTime = ref(null)
+const showScanner = ref(false)
 
 let BarcodeScanner = null
+let html5QrCode = null
 
 // Computed
 const totalProducts = computed(() => {
@@ -275,43 +296,198 @@ onMounted(async () => {
   console.log('👤 User:', user.value)
   console.log('📧 Admin email:', adminEmail)
   
-  // ✅ احراز هویت موقتاً غیرفعال شده
-  /*
-  if (!user.value || user.value.email !== adminEmail) {
-    console.log('❌ Not admin, redirecting to login')
-    await navigateTo('/login')
-    return
-  }
-  */
-  
   console.log('✅ Admin access granted (auth temporarily disabled)')
   
-  // Check Capacitor
-  await checkCapacitor()
+  // Check for camera availability
+  await checkCameraAvailability()
+  
+  // Load Html5Qrcode library for web
+  if (!isCapacitor.value && process.client) {
+    await loadHtml5Qrcode()
+  }
   
   // Load today's inventory
   loadTodayInventory()
 })
 
-// Check Capacitor
-async function checkCapacitor() {
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const module = await import('@capacitor-mlkit/barcode-scanning')
-      BarcodeScanner = module.BarcodeScanner
-      
-      const { supported } = await BarcodeScanner.isSupported()
-      if (supported) {
-        isCapacitor.value = true
+onUnmounted(() => {
+  // Clean up scanner if active
+  if (html5QrCode) {
+    stopWebScanner()
+  }
+})
+
+// Load Html5Qrcode library
+async function loadHtml5Qrcode() {
+  try {
+    // Dynamically import html5-qrcode
+    const { Html5Qrcode } = await import('html5-qrcode')
+    html5QrCode = Html5Qrcode
+    console.log('✅ Html5Qrcode library loaded')
+  } catch (error) {
+    console.error('Error loading Html5Qrcode:', error)
+    // Try loading from CDN as fallback
+    if (typeof window !== 'undefined' && !window.Html5Qrcode) {
+      const script = document.createElement('script')
+      script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'
+      script.onload = () => {
+        html5QrCode = window.Html5Qrcode
+        console.log('✅ Html5Qrcode loaded from CDN')
       }
-    } catch (error) {
-      console.error('خطا در بارگذاری BarcodeScanner:', error)
+      document.head.appendChild(script)
     }
   }
 }
 
-// Start Scan
+// Check Camera Availability (both Capacitor and Web)
+async function checkCameraAvailability() {
+  if (Capacitor.isNativePlatform()) {
+    console.log('📱 Native platform detected')
+    isCapacitor.value = true
+    await checkCapacitorCamera()
+  } else {
+    console.log('🌐 Web platform detected')
+    isCapacitor.value = false
+    await checkWebCamera()
+  }
+}
+
+// Check Capacitor Camera
+async function checkCapacitorCamera() {
+  try {
+    const module = await import('@capacitor-mlkit/barcode-scanning')
+    BarcodeScanner = module.BarcodeScanner
+    
+    const { supported } = await BarcodeScanner.isSupported()
+    if (supported) {
+      isCameraAvailable.value = true
+      console.log('✅ Capacitor camera available')
+    }
+  } catch (error) {
+    console.error('خطا در بارگذاری BarcodeScanner:', error)
+    isCameraAvailable.value = false
+  }
+}
+
+// Check Web Camera
+async function checkWebCamera() {
+  try {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      isCameraAvailable.value = true
+      console.log('✅ Web camera API available')
+    } else {
+      isCameraAvailable.value = false
+      console.log('❌ Camera API not supported')
+    }
+  } catch (error) {
+    console.error('Error checking web camera:', error)
+    isCameraAvailable.value = false
+  }
+}
+
+// Start Web Scanner
+async function startWebScanner() {
+  if (!html5QrCode) {
+    showMessage('کتابخانه اسکنر در حال بارگذاری است...', 'info')
+    setTimeout(() => startWebScanner(), 1000)
+    return
+  }
+
+  try {
+    // First show the scanner container
+    showScanner.value = true
+    isScanning.value = true
+    
+    // Wait for DOM to update
+    await nextTick()
+    
+    // Add a small delay to ensure element is in DOM
+    setTimeout(async () => {
+      try {
+        const scanner = new html5QrCode("qr-reader")
+        
+        // Configuration for scanner
+        const config = {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+          // Add more options for better mobile support
+          rememberLastUsedCamera: true,
+          supportedScanTypes: [0] // 0 = camera
+        }
+        
+        // Start scanning
+        await scanner.start(
+          { facingMode: "environment" }, // Use back camera
+          config,
+          async (decodedText) => {
+            // QR Code detected
+            console.log('QR Code detected:', decodedText)
+            manualInput.value = decodedText
+            await stopWebScanner(scanner)
+            showMessage('کد QR با موفقیت اسکن شد', 'success')
+          },
+          (errorMessage) => {
+            // No QR code detected
+            // This is normal during scanning, no action needed
+          }
+        ).catch((err) => {
+          console.error('Error starting scanner:', err)
+          showMessage('خطا در راه‌اندازی دوربین', 'error')
+          stopWebScanner(scanner)
+        })
+        
+        // Store scanner instance for cleanup
+        window.currentScanner = scanner
+        
+      } catch (error) {
+        console.error('Scanner initialization error:', error)
+        showMessage('خطا در راه‌اندازی اسکنر', 'error')
+        isScanning.value = false
+        showScanner.value = false
+      }
+    }, 100) // Small delay to ensure DOM is ready
+    
+  } catch (error) {
+    console.error('Scanner error:', error)
+    showMessage('خطا در اسکن QR', 'error')
+    isScanning.value = false
+    showScanner.value = false
+  }
+}
+
+// Stop Web Scanner
+async function stopWebScanner(scanner = null) {
+  try {
+    const activeScanner = scanner || window.currentScanner
+    if (activeScanner) {
+      await activeScanner.stop()
+      activeScanner.clear()
+      window.currentScanner = null
+    }
+  } catch (error) {
+    console.error('Error stopping scanner:', error)
+  } finally {
+    isScanning.value = false
+    showScanner.value = false
+  }
+}
+
+// Start Scan (Updated)
 async function startScan() {
+  // If it's web platform, use Html5Qrcode
+  if (!isCapacitor.value) {
+    if (showScanner.value) {
+      // Stop scanner if already running
+      await stopWebScanner()
+    } else {
+      // Start scanner
+      await startWebScanner()
+    }
+    return
+  }
+
+  // Original Capacitor logic
   if (!BarcodeScanner || isScanning.value) return
 
   try {
@@ -330,7 +506,8 @@ async function startScan() {
 
     if (scanResult?.barcodes?.length > 0) {
       const qrData = scanResult.barcodes[0].rawValue || scanResult.barcodes[0].displayValue
-      await handleResult(qrData)
+      manualInput.value = qrData
+      showMessage('کد QR با موفقیت اسکن شد', 'success')
     } else {
       showMessage('کدی شناسایی نشد', 'info')
     }
@@ -346,53 +523,72 @@ async function submitCode() {
   const value = manualInput.value.trim()
   if (!value) return
 
-  // بررسی تعداد کارتن
   if (cartonCountInput.value === null || cartonCountInput.value === '' || cartonCountInput.value < 0) {
     showMessage('لطفاً تعداد کارتن را وارد کنید', 'error')
     return
   }
 
   await handleResult(value)
-  clearInput()
 }
 
-// Handle Result
+// Handle Result - FIXED to handle both JSON and pipe-delimited formats
 async function handleResult(qrData) {
   try {
     isSaving.value = true
     showMessage('در حال ثبت در انبار...', 'info')
 
-    // Parse QR data
+    // Parse QR data - handle both JSON and pipe-delimited formats
     let productData
     try {
+      // First try to parse as JSON
       productData = JSON.parse(qrData)
+      console.log('Parsed as JSON:', productData)
     } catch (e) {
-      showMessage('فرمت JSON نامعتبر است', 'error')
-      return
+      // If not JSON, try to parse as pipe-delimited format
+      console.log('Not JSON format, trying pipe-delimited format...')
+      
+      // Expected format: product|blend|origin|roastDate|batchNumber|packageWeight|packageAmount
+      const parts = qrData.split('|')
+      
+      if (parts.length >= 7) {
+        productData = {
+          product: parts[0] || '',
+          blend: parts[1] || '',
+          origin: parts[2] || '',
+          roastDate: parts[3] || '',
+          batchNumber: parts[4] || '',
+          packageWeight: parts[5] || '',
+          packageAmount: parseInt(parts[6]) || 0
+        }
+        
+        console.log('Parsed pipe-delimited data:', productData)
+      } else {
+        showMessage('فرمت QR نامعتبر است (نه JSON و نه pipe-delimited)', 'error')
+        return
+      }
     }
 
-    // اضافه کردن تعداد کارتن از فیلد ورودی
+    // Add carton count and offset from user input
     productData.cartonCount = Number(cartonCountInput.value)
-    
-    // اضافه کردن آفست از dropdown
     productData.offset = selectedOffset.value
 
-    // Validate required fields (حذف cartonCount از فیلدهای JSON)
+    // Validate required fields
     const requiredFields = ['product', 'blend', 'origin', 'roastDate', 'batchNumber', 'packageWeight', 'packageAmount']
     const missingFields = requiredFields.filter(field => !productData[field])
     
     if (missingFields.length > 0) {
-      showMessage(`فیلدهای ضروری: ${missingFields.join(', ')}`, 'error')
+      showMessage(`فیلدهای ضروری خالی هستند: ${missingFields.join(', ')}`, 'error')
       return
     }
 
-    // بررسی مجدد تعداد کارتن
     if (!productData.cartonCount || productData.cartonCount < 0) {
       showMessage('تعداد کارتن نامعتبر است', 'error')
       return
     }
 
-    // محاسبه تعداد کل
+    // Ensure packageAmount is a number
+    productData.packageAmount = parseInt(productData.packageAmount) || 0
+    
     const totalInStock = (productData.cartonCount * productData.packageAmount) + (productData.offset || 0)
 
     // Save to Google Sheets via API
@@ -411,7 +607,7 @@ async function handleResult(qrData) {
           'Batch-Number': productData.batchNumber,
           'Package-Weight': productData.packageWeight,
           'Package-Amount': productData.packageAmount,
-          'cartoncount': productData.cartonCount, // ارسال به ستون cartoncount
+          'cartoncount': productData.cartonCount,
           'offset': productData.offset || 0,
           'total in stock': totalInStock,
           'Timestamp': new Date().toISOString()
@@ -425,7 +621,6 @@ async function handleResult(qrData) {
         minute: '2-digit'
       })
 
-      // Save to last result
       lastResult.value = {
         data: productData,
         time: currentTime,
@@ -434,19 +629,18 @@ async function handleResult(qrData) {
 
       lastScanTime.value = currentTime
 
-      // Add to today's inventory
       todayInventory.value.unshift({
         ...productData,
         totalInStock: totalInStock,
         time: currentTime
       })
 
-      // Save to localStorage
       saveTodayInventory()
 
-      // Reset fields after successful save
+      // Clear inputs after successful save
       cartonCountInput.value = null
       selectedOffset.value = 0
+      manualInput.value = ''
 
       showMessage(`محصول ${productData.product} با ${totalInStock} عدد در انبار ثبت شد`, 'success')
     } else {
@@ -456,27 +650,42 @@ async function handleResult(qrData) {
 
   } catch (error) {
     console.error('خطا در پردازش:', error)
-    // برای تست، حتی بدون API کار کنه
+    
+    // Fallback to offline mode
     const currentTime = new Date().toLocaleTimeString('fa-IR', {
       hour: '2-digit',
       minute: '2-digit'
     })
 
-    // Parse data for testing
     let productData
     try {
+      // Try JSON first
       productData = JSON.parse(qrData)
-      productData.cartonCount = Number(cartonCountInput.value)
-      productData.offset = selectedOffset.value
     } catch (e) {
-      showMessage('فرمت داده نامعتبر', 'error')
-      return
+      // Try pipe-delimited
+      const parts = qrData.split('|')
+      if (parts.length >= 7) {
+        productData = {
+          product: parts[0] || '',
+          blend: parts[1] || '',
+          origin: parts[2] || '',
+          roastDate: parts[3] || '',
+          batchNumber: parts[4] || '',
+          packageWeight: parts[5] || '',
+          packageAmount: parseInt(parts[6]) || 0
+        }
+      } else {
+        showMessage('فرمت داده نامعتبر', 'error')
+        return
+      }
     }
+    
+    productData.cartonCount = Number(cartonCountInput.value)
+    productData.offset = selectedOffset.value
+    productData.packageAmount = parseInt(productData.packageAmount) || 0
 
-    // محاسبه تعداد کل
     const totalInStock = (productData.cartonCount * productData.packageAmount) + (productData.offset || 0)
 
-    // Save locally for testing
     lastResult.value = {
       data: productData,
       time: currentTime,
@@ -493,9 +702,10 @@ async function handleResult(qrData) {
 
     saveTodayInventory()
     
-    // Reset fields after successful save
+    // Clear inputs
     cartonCountInput.value = null
     selectedOffset.value = 0
+    manualInput.value = ''
     
     showMessage(`محصول با ${totalInStock} عدد ثبت شد (حالت آفلاین)`, 'info')
   } finally {
@@ -704,6 +914,7 @@ h1 {
 .input-field::placeholder {
   color: #666;
   font-size: 11px;
+  white-space: pre-line;
 }
 
 /* Select Dropdown */
