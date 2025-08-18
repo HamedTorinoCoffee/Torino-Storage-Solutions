@@ -4,12 +4,6 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
   devtools: { enabled: true },
   
-  // GitHub Pages base URL
-  app: {
-    baseURL: process.env.NODE_ENV === 'production' ? '/Torino-Storage-Solutions/' : '/',
-    buildAssetsDir: 'assets'
-  },
-
   modules: [
     '@nuxt/ui',
     '@nuxtjs/tailwindcss',
@@ -37,20 +31,18 @@ export default defineNuxtConfig({
     googleSheetId: process.env.GOOGLE_SHEET_ID,
     
     public: {
-      // Supabase تنظیمات
+      // Supabase settings
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
       
-      // Google Sheets تنظیمات  
+      // Google Sheets settings
       googleSheetId: process.env.GOOGLE_SHEET_ID,
       
-      // اضافه کردن ایمیل اولین ادمین
-      firstAdminEmail: process.env.FIRST_ADMIN_EMAIL || 'admin@example.com',
+      // First admin email
+      firstAdminEmail: process.env.NUXT_PUBLIC_FIRST_ADMIN_EMAIL || 'h.aghasi@torino.company',
       
-      // Base URL برای اپ اندروید و وب - داینامیک
-      baseURL: process.env.NODE_ENV === 'production' 
-        ? 'https://your-domain.com'  // بعداً تغییر دهید
-        : '' // خالی = از آدرس فعلی استفاده می‌کنه (داینامیک)
+      // Base URL - removed GitHub Pages specific config
+      baseURL: ''
     }
   },
 
@@ -80,18 +72,22 @@ export default defineNuxtConfig({
     }
   },
 
+  // CRITICAL: Changed from 'static' to 'netlify'
   nitro: {
-    preset: 'static'
+    preset: 'netlify',
+    rollupConfig: {
+      external: ['googleapis']
+    }
   },
 
-  // Development server configuration با HTTPS
+  // Add build configuration for googleapis
+  build: {
+    transpile: ['@heroicons/vue', 'googleapis']
+  },
+
+  // Development server configuration
   devServer: {
-    https: {
-      // مسیر فایل‌های certificate
-      key: './192.168.82.190+1-key.pem',
-      cert: './192.168.82.190+1.pem'
-    },
-    host: 'localhost', // تغییر به localhost
+    host: 'localhost',
     port: 3000
   },
 
@@ -100,27 +96,13 @@ export default defineNuxtConfig({
       devSourcemap: false
     },
     build: {
-      sourcemap: false,
-      rollupOptions: {
-        external: ['/logo.png']
-      }
+      sourcemap: false
     },
-    clearScreen: false,
-    server: {
-      // تنظیمات HTTPS برای Vite
-      https: {
-        key: './192.168.82.190+1-key.pem',
-        cert: './192.168.82.190+1.pem'
-      }
-    }
+    clearScreen: false
   },
 
   typescript: {
     strict: false,
     typeCheck: false
-  },
-
-  build: {
-    transpile: ['@heroicons/vue']
   }
 })
