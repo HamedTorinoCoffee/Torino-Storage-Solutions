@@ -70,3 +70,21 @@ Thumbs.db
 
 # Local Netlify folder
 .netlify
+
+# Deployment artifacts
+.vercel
+vercel.json
+
+# Android build artifacts
+android/app/src/main/assets/public
+android/app/build
+android/build
+android/capacitor-cordova-android-plugins/build
+
+# Development tools
+cloudflared.exe
+mkcert.exe
+
+# IP-specific development directories
+0.0.0.0/
+192.168.*/
