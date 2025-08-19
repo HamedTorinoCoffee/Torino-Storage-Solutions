@@ -72,12 +72,11 @@ export default defineNuxtConfig({
     }
   },
 
-  // Static generation for Netlify
+  // Netlify serverless functions
   nitro: {
-    preset: 'static',
-    prerender: {
-      crawlLinks: false,
-      routes: ['/']
+    preset: 'netlify',
+    rollupConfig: {
+      external: ['googleapis']
     }
   },
 
