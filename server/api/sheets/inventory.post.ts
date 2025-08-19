@@ -1,5 +1,5 @@
 // server/api/sheets/inventory.post.ts
-// COMPLETE WORKING VERSION - FIXED
+// نسخه جدید با Base64
 
 export default defineEventHandler(async (event) => {
   try {
@@ -18,28 +18,34 @@ export default defineEventHandler(async (event) => {
     console.log('📊 Data:', data)
 
     // Check environment variables
-    if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
+    if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY_BASE64) {
+      console.error('Missing credentials:', {
+        hasEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
+        hasBase64Key: !!process.env.GOOGLE_PRIVATE_KEY_BASE64
+      })
       throw new Error('Missing Google credentials in environment variables')
     }
 
     // Import Google Sheets
     const { google } = await import('googleapis')
     
-    // Get client email safely
-    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL || ''
+    // 🔥 NEW: Decode Base64 private key
+    const privateKeyBase64 = process.env.GOOGLE_PRIVATE_KEY_BASE64
+    const privateKey = Buffer.from(privateKeyBase64, 'base64').toString('utf-8')
     
-    // CRITICAL FIX: Build complete service account object
+    console.log('🔑 Key decoded, length:', privateKey.length)
+    console.log('🔑 Key starts with BEGIN:', privateKey.includes('BEGIN PRIVATE KEY'))
+    
+    // Build service account object
     const serviceAccount = {
       type: 'service_account' as const,
-      project_id: process.env.GOOGLE_PROJECT_ID || '',
-      private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID || '',
-      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      client_email: clientEmail,
-      client_id: process.env.GOOGLE_CLIENT_ID || '',
+      project_id: process.env.GOOGLE_PROJECT_ID || 'torino-storage',
+      private_key: privateKey,
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
       auth_uri: 'https://accounts.google.com/o/oauth2/auth',
       token_uri: 'https://oauth2.googleapis.com/token',
       auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
-      client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(clientEmail)}`
+      client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.GOOGLE_CLIENT_EMAIL || '')}`
     }
     
     // Use GoogleAuth with complete credentials
@@ -165,7 +171,12 @@ export default defineEventHandler(async (event) => {
     }
 
   } catch (error: any) {
-    console.error('❌ Error details:', error)
+    console.error('❌ Error details:', {
+      message: error.message,
+      code: error.code,
+      response: error.response?.data
+    })
+    
     throw createError({
       statusCode: 500,
       statusMessage: error.message || 'Server error saving inventory'
