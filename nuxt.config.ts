@@ -1,8 +1,7 @@
-// nuxt.config.ts
 export default defineNuxtConfig({
   ssr: false,
   compatibilityDate: '2024-04-03',
-  devtools: { enabled: true },
+  devtools: { enabled: false },
   
   modules: [
     '@nuxt/ui',
@@ -10,11 +9,30 @@ export default defineNuxtConfig({
     '@nuxtjs/color-mode'
   ],
 
+  css: [
+    '~/assets/css/fonts.css',
+    '~/assets/css/tailwind.css'
+  ],
+
+  // THIS IS THE KEY CHANGE - no nitro preset at all for static sites
+  nitro: {
+    output: {
+      publicDir: 'dist'
+    }
+  },
+  
+  runtimeConfig: {
+    public: {
+      supabaseUrl: process.env.SUPABASE_URL || '',
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
+      googleSheetId: process.env.GOOGLE_SHEET_ID || '',
+      firstAdminEmail: process.env.NUXT_PUBLIC_FIRST_ADMIN_EMAIL || 'h.aghasi@torino.company',
+    }
+  },
+
   tailwindcss: {
     cssPath: '~/assets/css/tailwind.css',
     configPath: 'tailwind.config.js',
-    exposeConfig: true,
-    viewer: true,
   },
 
   colorMode: {
@@ -23,35 +41,9 @@ export default defineNuxtConfig({
     fallback: 'light',
   },
 
-  runtimeConfig: {
-    // Private runtime config (only available on server-side)
-    googleProjectId: process.env.GOOGLE_PROJECT_ID,
-    googlePrivateKey: process.env.GOOGLE_PRIVATE_KEY,
-    googleClientEmail: process.env.GOOGLE_CLIENT_EMAIL,
-    googleSheetId: process.env.GOOGLE_SHEET_ID,
-    
-    public: {
-      // Supabase settings
-      supabaseUrl: process.env.SUPABASE_URL,
-      supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
-      
-      // Google Sheets settings
-      googleSheetId: process.env.GOOGLE_SHEET_ID,
-      
-      // First admin email
-      firstAdminEmail: process.env.NUXT_PUBLIC_FIRST_ADMIN_EMAIL || 'h.aghasi@torino.company',
-      
-      // Base URL - removed GitHub Pages specific config
-      baseURL: ''
-    }
-  },
-
-  css: [
-    '~/assets/css/fonts.css',
-    '~/assets/css/tailwind.css'
-  ],
-
   app: {
+    baseURL: '/',
+    buildAssetsDir: '/_nuxt/',
     head: {
       htmlAttrs: {
         lang: 'fa',
@@ -64,7 +56,8 @@ export default defineNuxtConfig({
         { name: 'format-detection', content: 'telephone=no' },
         { name: 'mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-capable', content: 'yes' },
-        { name: 'apple-mobile-web-app-status-bar-style', content: 'default' }
+        { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
+        { name: 'description', content: 'سیستم مدیریت انبار هوشمند شرکت تورینو' }
       ],
       link: [
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }
@@ -72,37 +65,22 @@ export default defineNuxtConfig({
     }
   },
 
-  // Netlify serverless functions
-  nitro: {
-    preset: 'netlify',
-    rollupConfig: {
-      external: ['googleapis']
-    }
-  },
-
-  // Add build configuration for googleapis
   build: {
-    transpile: ['@heroicons/vue', 'googleapis']
-  },
-
-  // Development server configuration
-  devServer: {
-    host: 'localhost',
-    port: 3000
+    transpile: ['@heroicons/vue']
   },
 
   vite: {
-    css: {
-      devSourcemap: false
+    define: {
+      'process.env.DEBUG': false,
     },
     build: {
-      sourcemap: false
-    },
-    clearScreen: false
+      sourcemap: false,
+    }
   },
 
   typescript: {
     strict: false,
-    typeCheck: false
+    typeCheck: false,
+    shim: false
   }
 })
