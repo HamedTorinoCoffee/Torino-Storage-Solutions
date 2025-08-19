@@ -1,5 +1,5 @@
 // server/api/sheets/inventory.post.ts
-// API endpoint for Real-Time Inventory management
+// COMPLETE WORKING VERSION - FIXED
 
 export default defineEventHandler(async (event) => {
   try {
@@ -25,17 +25,34 @@ export default defineEventHandler(async (event) => {
     // Import Google Sheets
     const { google } = await import('googleapis')
     
-    // Create auth with credentials - this is the working approach
+    // Get client email safely
+    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL || ''
+    
+    // CRITICAL FIX: Build complete service account object
+    const serviceAccount = {
+      type: 'service_account' as const,
+      project_id: process.env.GOOGLE_PROJECT_ID || '',
+      private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID || '',
+      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      client_email: clientEmail,
+      client_id: process.env.GOOGLE_CLIENT_ID || '',
+      auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+      token_uri: 'https://oauth2.googleapis.com/token',
+      auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+      client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(clientEmail)}`
+    }
+    
+    // Use GoogleAuth with complete credentials
     const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      },
+      credentials: serviceAccount,
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     })
     
-    // Create sheets instance with the auth directly
-    const sheets = google.sheets({ version: 'v4', auth })
+    // Get authenticated client
+    const authClient = await auth.getClient()
+    
+    // Create sheets instance
+    const sheets = google.sheets({ version: 'v4', auth: authClient as any })
     const spreadsheetId = process.env.GOOGLE_SHEET_ID
 
     if (!spreadsheetId) {
@@ -78,8 +95,7 @@ export default defineEventHandler(async (event) => {
         }
       })
 
-      // Add headers for inventory sheet
-      console.log('📝 Adding headers...')
+      // Add headers
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `${sheetName}!A1:L1`,
@@ -101,12 +117,9 @@ export default defineEventHandler(async (event) => {
           ]]
         }
       })
-
-      console.log(`✅ Sheet "${sheetName}" created with headers`)
     }
 
     // Get the last row
-    console.log('🔢 Getting last row...')
     const rangeData = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${sheetName}!A:A`
@@ -115,8 +128,6 @@ export default defineEventHandler(async (event) => {
     const lastRow = rangeData.data.values ? rangeData.data.values.length : 1
     const nextRow = lastRow + 1
     const rowNumber = sheetExists ? lastRow : 1
-
-    console.log(`📍 Adding data to row ${nextRow}`)
 
     // Add new data
     await sheets.spreadsheets.values.append({
@@ -136,66 +147,12 @@ export default defineEventHandler(async (event) => {
           data['cartoncount'] || 0,
           data['offset'] || 0,
           data['total in stock'] || 0,
-          new Date(data['Timestamp']).toLocaleString('en-US', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-          })
+          new Date(data['Timestamp']).toLocaleString('en-US')
         ]]
       }
     })
 
     console.log('✅ Data added successfully')
-
-    // Format sheet (optional)
-    try {
-      const sheetId = spreadsheetInfo.data.sheets?.find(s => s.properties?.title === sheetName)?.properties?.sheetId
-      
-      if (sheetId !== undefined) {
-        await sheets.spreadsheets.batchUpdate({
-          spreadsheetId,
-          requestBody: {
-            requests: [
-              {
-                repeatCell: {
-                  range: {
-                    sheetId,
-                    startRowIndex: 0,
-                    endRowIndex: 1
-                  },
-                  cell: {
-                    userEnteredFormat: {
-                      backgroundColor: { red: 0.2, green: 0.5, blue: 0.2 },
-                      textFormat: {
-                        foregroundColor: { red: 1, green: 1, blue: 1 },
-                        bold: true
-                      }
-                    }
-                  },
-                  fields: 'userEnteredFormat(backgroundColor,textFormat)'
-                }
-              },
-              {
-                autoResizeDimensions: {
-                  dimensions: {
-                    sheetId,
-                    dimension: 'COLUMNS',
-                    startIndex: 0,
-                    endIndex: 12
-                  }
-                }
-              }
-            ]
-          }
-        })
-        console.log('✅ Formatting applied')
-      }
-    } catch (formatError) {
-      console.warn('⚠️ Formatting failed (non-critical):', formatError)
-    }
 
     return {
       success: true,
@@ -208,42 +165,7 @@ export default defineEventHandler(async (event) => {
     }
 
   } catch (error: any) {
-    console.error('❌ Full error details:', {
-      message: error.message,
-      code: error.code,
-      errors: error.errors,
-      stack: error.stack
-    })
-    
-    // Provide more specific error messages
-    if (error.message?.includes('JWT') || error.message?.includes('token') || error.message?.includes('iat')) {
-      throw createError({
-        statusCode: 401,
-        statusMessage: 'Authentication failed - JWT token issue. Check server time synchronization.'
-      })
-    }
-    
-    if (error.message?.includes('key') || error.message?.includes('keyFile')) {
-      throw createError({
-        statusCode: 401,
-        statusMessage: 'Authentication failed - Private key not configured properly. Check GOOGLE_PRIVATE_KEY in .env file.'
-      })
-    }
-    
-    if (error.code === 403 || error.message?.includes('permission')) {
-      throw createError({
-        statusCode: 403,
-        statusMessage: `Permission denied - Please ensure ${process.env.GOOGLE_CLIENT_EMAIL} has Editor access to the Google Sheet`
-      })
-    }
-    
-    if (error.code === 404) {
-      throw createError({
-        statusCode: 404,
-        statusMessage: 'Google Sheet not found - Please check the Sheet ID in your configuration'
-      })
-    }
-    
+    console.error('❌ Error details:', error)
     throw createError({
       statusCode: 500,
       statusMessage: error.message || 'Server error saving inventory'
