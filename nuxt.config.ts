@@ -72,11 +72,12 @@ export default defineNuxtConfig({
     }
   },
 
-  // CRITICAL: Changed from 'static' to 'netlify'
+  // Static generation for Netlify
   nitro: {
-    preset: 'netlify',
-    rollupConfig: {
-      external: ['googleapis']
+    preset: 'static',
+    prerender: {
+      crawlLinks: false,
+      routes: ['/']
     }
   },
 
