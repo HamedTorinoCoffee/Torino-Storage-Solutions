@@ -150,13 +150,13 @@ const handleSubmit = async () => {
     }
     
     console.log('🔐 Attempting login with:', formData.value.email)
-    console.log('🔑 Admin email from config:', adminEmail)
+    console.log('🔑 Admin emails from config:', adminEmails)
     
     // Debug: بررسی دقیق
     console.log('📧 Email comparison:')
     console.log('  - User email:', formData.value.email)
-    console.log('  - Admin email:', adminEmail)
-    console.log('  - Are equal?:', formData.value.email === adminEmail)
+    console.log('  - Admin emails:', adminEmails)
+    console.log('  - Is admin?:', adminEmails.includes(formData.value.email.toLowerCase()))
     
     const result = await login(formData.value.email, formData.value.password)
     
@@ -166,7 +166,8 @@ const handleSubmit = async () => {
       console.log('✅ Login successful')
       
       // Check if user is admin
-    const isAdmin = adminEmails.includes(formData.value.email.toLowerCase()) 
+      const isAdmin = adminEmails.includes(formData.value.email.toLowerCase())
+      console.log('👤 Is admin?', isAdmin)
       
       // Redirect based on user type
       if (isAdmin) {
