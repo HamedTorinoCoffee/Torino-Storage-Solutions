@@ -113,9 +113,11 @@ const formData = ref({
   password: ''
 })
 
-// Admin email from runtime config
+// Admin emails from runtime config
 const config = useRuntimeConfig()
-const adminEmail = config.public.firstAdminEmail || ''
+const adminEmails = (config.public.adminEmails || 'h.aghasi@torino.company,amirhassan@torino.company')
+  .split(',')
+  .map(email => email.trim().toLowerCase())
 
 // Redirect path - default based on user type
 const redirectTo = ref('/user-dashboard')
@@ -164,8 +166,7 @@ const handleSubmit = async () => {
       console.log('✅ Login successful')
       
       // Check if user is admin
-      const isAdmin = formData.value.email === adminEmail
-      console.log('👤 Is admin?', isAdmin)
+    const isAdmin = adminEmails.includes(formData.value.email.toLowerCase()) 
       
       // Redirect based on user type
       if (isAdmin) {

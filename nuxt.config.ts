@@ -14,11 +14,9 @@ export default defineNuxtConfig({
     '~/assets/css/tailwind.css'
   ],
 
-  // THIS IS THE KEY CHANGE - no nitro preset at all for static sites
+  // 🔥 FIXED: Changed to Vercel preset
   nitro: {
-    output: {
-      publicDir: 'dist'
-    }
+    preset: 'vercel'
   },
   
   runtimeConfig: {

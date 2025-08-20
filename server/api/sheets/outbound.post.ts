@@ -1,5 +1,5 @@
 // server/api/sheets/outbound.post.ts
-// API endpoint for Outbound (خروج انبار / ورود کافه)
+// API endpoint for Outbound (خروج انبار / ورود کافه) - نسخه کامل با Base64
 
 export default defineEventHandler(async (event) => {
   try {
@@ -19,24 +19,47 @@ export default defineEventHandler(async (event) => {
     console.log('📊 Data:', data)
 
     // Check environment variables
-    if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
+    if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY_BASE64) {
+      console.error('Missing credentials:', {
+        hasEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
+        hasBase64Key: !!process.env.GOOGLE_PRIVATE_KEY_BASE64
+      })
       throw new Error('Missing Google credentials in environment variables')
     }
 
     // Import Google Sheets
     const { google } = await import('googleapis')
     
-    // Create auth with credentials
+    // 🔥 NEW: Decode Base64 private key
+    const privateKeyBase64 = process.env.GOOGLE_PRIVATE_KEY_BASE64
+    const privateKey = Buffer.from(privateKeyBase64, 'base64').toString('utf-8')
+    
+    console.log('🔑 Key decoded, length:', privateKey.length)
+    console.log('🔑 Key starts with BEGIN:', privateKey.includes('BEGIN PRIVATE KEY'))
+    
+    // Build service account object
+    const serviceAccount = {
+      type: 'service_account' as const,
+      project_id: process.env.GOOGLE_PROJECT_ID || 'torino-storage',
+      private_key: privateKey,
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+      token_uri: 'https://oauth2.googleapis.com/token',
+      auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+      client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.GOOGLE_CLIENT_EMAIL || '')}`
+    }
+    
+    // Use GoogleAuth with complete credentials
     const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      },
+      credentials: serviceAccount,
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     })
     
+    // Get authenticated client
+    const authClient = await auth.getClient()
+    
     // Create sheets instance
-    const sheets = google.sheets({ version: 'v4', auth })
+    const sheets = google.sheets({ version: 'v4', auth: authClient as any })
     const spreadsheetId = process.env.GOOGLE_SHEET_ID
 
     if (!spreadsheetId) {
@@ -98,7 +121,7 @@ export default defineEventHandler(async (event) => {
             'Offset',
             'Total-In-Stock',
             'Timestamp',
-            'Scanned-By'  // نشان میده توسط کی اسکن شده (Admin/Cafe)
+            'Scanned-By'
           ]]
         }
       })
@@ -156,6 +179,53 @@ export default defineEventHandler(async (event) => {
 
     console.log('✅ Data added successfully')
 
+    // Format sheet (optional)
+    try {
+      const sheetId = spreadsheetInfo.data.sheets?.find(s => s.properties?.title === sheetName)?.properties?.sheetId
+      
+      if (sheetId !== undefined) {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId,
+          requestBody: {
+            requests: [
+              {
+                repeatCell: {
+                  range: {
+                    sheetId,
+                    startRowIndex: 0,
+                    endRowIndex: 1
+                  },
+                  cell: {
+                    userEnteredFormat: {
+                      backgroundColor: { red: 0.2, green: 0.5, blue: 0.2 },
+                      textFormat: {
+                        foregroundColor: { red: 1, green: 1, blue: 1 },
+                        bold: true
+                      }
+                    }
+                  },
+                  fields: 'userEnteredFormat(backgroundColor,textFormat)'
+                }
+              },
+              {
+                autoResizeDimensions: {
+                  dimensions: {
+                    sheetId,
+                    dimension: 'COLUMNS',
+                    startIndex: 0,
+                    endIndex: 12
+                  }
+                }
+              }
+            ]
+          }
+        })
+        console.log('✅ Formatting applied')
+      }
+    } catch (formatError) {
+      console.warn('⚠️ Formatting failed (non-critical):', formatError)
+    }
+
     return {
       success: true,
       message: `Outbound saved successfully to sheet "${sheetName}"`,
@@ -172,8 +242,30 @@ export default defineEventHandler(async (event) => {
       message: error.message,
       code: error.code,
       errors: error.errors,
-      stack: error.stack
+      response: error.response?.data
     })
+    
+    // Provide specific error messages
+    if (error.message?.includes('DECODER') || error.message?.includes('routines')) {
+      throw createError({
+        statusCode: 500,
+        statusMessage: 'Private key format error. Please check GOOGLE_PRIVATE_KEY_BASE64 environment variable.'
+      })
+    }
+    
+    if (error.message?.includes('JWT') || error.message?.includes('token')) {
+      throw createError({
+        statusCode: 401,
+        statusMessage: 'Authentication failed - JWT token issue.'
+      })
+    }
+    
+    if (error.code === 403) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: `Permission denied - Please ensure ${process.env.GOOGLE_CLIENT_EMAIL} has Editor access to the Google Sheet`
+      })
+    }
     
     throw createError({
       statusCode: 500,
