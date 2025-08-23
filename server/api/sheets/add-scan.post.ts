@@ -1,9 +1,9 @@
-// server/api/sheets/add-scan.post.ts
-// نسخه اصلاح شده با استفاده از user_sheet_name
+﻿// server/api/sheets/add-scan.post.ts
+// Ù†Ø³Ø®Ù‡ Ø§ØµÙ„Ø§Ø­ Ø´Ø¯Ù‡ Ø¨Ø§ Ø§Ø³ØªÙØ§Ø¯Ù‡ Ø§Ø² user_sheet_name
 
 export default defineEventHandler(async (event) => {
   try {
-    // فقط POST method قبول کن
+    // ÙÙ‚Ø· POST method Ù‚Ø¨ÙˆÙ„ Ú©Ù†
     if (getMethod(event) !== 'POST') {
       throw createError({
         statusCode: 405,
@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
 
     const body = await readBody(event)
     const { 
-      user_sheet_name,  // نام sheet کاربر
+      user_sheet_name,  // Ù†Ø§Ù… sheet Ú©Ø§Ø±Ø¨Ø±
       user_email,
       user_full_name, 
       barcode_value, 
@@ -22,22 +22,22 @@ export default defineEventHandler(async (event) => {
       scanned_at 
     } = body
 
-    // استفاده از user_sheet_name یا ایمیل به عنوان نام sheet
+    // Ø§Ø³ØªÙØ§Ø¯Ù‡ Ø§Ø² user_sheet_name ÛŒØ§ Ø§ÛŒÙ…ÛŒÙ„ Ø¨Ù‡ Ø¹Ù†ÙˆØ§Ù† Ù†Ø§Ù… sheet
     const sheetName = user_sheet_name || user_email?.split('@')[0]?.replace(/[^a-zA-Z0-9_]/g, '_') || `User_${Date.now()}`
     
-    console.log(`📋 Processing scan for sheet: ${sheetName}`)
-    console.log(`👤 User: ${user_full_name} (${user_email})`)
-    console.log(`📱 Barcode: ${barcode_value} (${barcode_type})`)
+    console.log(`ðŸ“‹ Processing scan for sheet: ${sheetName}`)
+    console.log(`ðŸ‘¤ User: ${user_full_name} (${user_email})`)
+    console.log(`ðŸ“± Barcode: ${barcode_value} (${barcode_type})`)
 
     try {
       // Import Google Sheets
       const { google } = await import('googleapis')
       
-      // تنظیمات اتصال
+      // ØªÙ†Ø¸ÛŒÙ…Ø§Øª Ø§ØªØµØ§Ù„
       const credentials = {
         type: 'service_account',
         project_id: process.env.GOOGLE_PROJECT_ID,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        private_key: process.env.GOOGLE_PRIVATE_KEY_BASE64?.replace(/\\n/g, '\n'),
         client_email: process.env.GOOGLE_CLIENT_EMAIL,
         auth_uri: 'https://accounts.google.com/o/oauth2/auth',
         token_uri: 'https://oauth2.googleapis.com/token'
@@ -51,8 +51,8 @@ export default defineEventHandler(async (event) => {
       const sheets = google.sheets({ version: 'v4', auth })
       const spreadsheetId = process.env.GOOGLE_SHEET_ID
 
-      // بررسی وجود sheet
-      console.log('🔍 Checking if sheet exists...')
+      // Ø¨Ø±Ø±Ø³ÛŒ ÙˆØ¬ÙˆØ¯ sheet
+      console.log('ðŸ” Checking if sheet exists...')
       const spreadsheetInfo = await sheets.spreadsheets.get({
         spreadsheetId,
         fields: 'sheets.properties'
@@ -61,12 +61,12 @@ export default defineEventHandler(async (event) => {
       const existingSheets = spreadsheetInfo.data.sheets?.map(s => s.properties?.title) || []
       const sheetExists = existingSheets.includes(sheetName)
 
-      console.log('📊 Existing sheets:', existingSheets)
-      console.log(`📄 Sheet "${sheetName}" exists:`, sheetExists)
+      console.log('ðŸ“Š Existing sheets:', existingSheets)
+      console.log(`ðŸ“„ Sheet "${sheetName}" exists:`, sheetExists)
 
-      // اگر sheet وجود نداره، بسازش
+      // Ø§Ú¯Ø± sheet ÙˆØ¬ÙˆØ¯ Ù†Ø¯Ø§Ø±Ù‡ØŒ Ø¨Ø³Ø§Ø²Ø´
       if (!sheetExists) {
-        console.log(`📝 Creating new sheet: ${sheetName}`)
+        console.log(`ðŸ“ Creating new sheet: ${sheetName}`)
         
         await sheets.spreadsheets.batchUpdate({
           spreadsheetId,
@@ -87,30 +87,30 @@ export default defineEventHandler(async (event) => {
           }
         })
 
-        // اضافه کردن headers
-        console.log('📝 Adding headers...')
+        // Ø§Ø¶Ø§ÙÙ‡ Ú©Ø±Ø¯Ù† headers
+        console.log('ðŸ“ Adding headers...')
         await sheets.spreadsheets.values.update({
           spreadsheetId,
           range: `${sheetName}!A1:G1`,
           valueInputOption: 'RAW',
           requestBody: {
             values: [[
-              'ردیف',
-              'نام کاربر',
-              'ایمیل',
-              'مقدار بارکد',
-              'نوع بارکد',
-              'دستگاه',
-              'زمان اسکن'
+              'Ø±Ø¯ÛŒÙ',
+              'Ù†Ø§Ù… Ú©Ø§Ø±Ø¨Ø±',
+              'Ø§ÛŒÙ…ÛŒÙ„',
+              'Ù…Ù‚Ø¯Ø§Ø± Ø¨Ø§Ø±Ú©Ø¯',
+              'Ù†ÙˆØ¹ Ø¨Ø§Ø±Ú©Ø¯',
+              'Ø¯Ø³ØªÚ¯Ø§Ù‡',
+              'Ø²Ù…Ø§Ù† Ø§Ø³Ú©Ù†'
             ]]
           }
         })
 
-        console.log(`✅ Sheet "${sheetName}" created with headers`)
+        console.log(`âœ… Sheet "${sheetName}" created with headers`)
       }
 
-      // دریافت آخرین ردیف
-      console.log('🔢 Getting last row...')
+      // Ø¯Ø±ÛŒØ§ÙØª Ø¢Ø®Ø±ÛŒÙ† Ø±Ø¯ÛŒÙ
+      console.log('ðŸ”¢ Getting last row...')
       const rangeData = await sheets.spreadsheets.values.get({
         spreadsheetId,
         range: `${sheetName}!A:A`
@@ -118,11 +118,11 @@ export default defineEventHandler(async (event) => {
 
       const lastRow = rangeData.data.values ? rangeData.data.values.length : 1
       const nextRow = lastRow + 1
-      const rowNumber = sheetExists ? lastRow : 1 // شماره ردیف (بدون احتساب header)
+      const rowNumber = sheetExists ? lastRow : 1 // Ø´Ù…Ø§Ø±Ù‡ Ø±Ø¯ÛŒÙ (Ø¨Ø¯ÙˆÙ† Ø§Ø­ØªØ³Ø§Ø¨ header)
 
-      console.log(`📍 Adding data to row ${nextRow}`)
+      console.log(`ðŸ“ Adding data to row ${nextRow}`)
 
-      // اضافه کردن داده جدید
+      // Ø§Ø¶Ø§ÙÙ‡ Ú©Ø±Ø¯Ù† Ø¯Ø§Ø¯Ù‡ Ø¬Ø¯ÛŒØ¯
       await sheets.spreadsheets.values.append({
         spreadsheetId,
         range: `${sheetName}!A${nextRow}`,
@@ -147,9 +147,9 @@ export default defineEventHandler(async (event) => {
         }
       })
 
-      console.log('✅ Data added successfully')
+      console.log('âœ… Data added successfully')
 
-      // فرمت کردن sheet (اختیاری)
+      // ÙØ±Ù…Øª Ú©Ø±Ø¯Ù† sheet (Ø§Ø®ØªÛŒØ§Ø±ÛŒ)
       try {
         await sheets.spreadsheets.batchUpdate({
           spreadsheetId,
@@ -187,14 +187,14 @@ export default defineEventHandler(async (event) => {
             ]
           }
         })
-        console.log('✅ Formatting applied')
+        console.log('âœ… Formatting applied')
       } catch (formatError) {
-        console.warn('⚠️ Formatting failed (non-critical):', formatError)
+        console.warn('âš ï¸ Formatting failed (non-critical):', formatError)
       }
 
       return {
         success: true,
-        message: `اسکن با موفقیت در sheet "${sheetName}" ذخیره شد`,
+        message: `Ø§Ø³Ú©Ù† Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ø¯Ø± sheet "${sheetName}" Ø°Ø®ÛŒØ±Ù‡ Ø´Ø¯`,
         data: {
           sheet_name: sheetName,
           row_number: nextRow,
@@ -203,21 +203,21 @@ export default defineEventHandler(async (event) => {
       }
 
     } catch (error) {
-      console.error('❌ Google Sheets Error:', error)
+      console.error('âŒ Google Sheets Error:', error)
       
       return {
         success: false,
-        message: 'خطا در ذخیره در Google Sheets',
-        error: error instanceof Error ? error.message : 'خطای نامشخص',
+        message: 'Ø®Ø·Ø§ Ø¯Ø± Ø°Ø®ÛŒØ±Ù‡ Ø¯Ø± Google Sheets',
+        error: error instanceof Error ? error.message : 'Ø®Ø·Ø§ÛŒ Ù†Ø§Ù…Ø´Ø®Øµ',
         error_details: error
       }
     }
 
   } catch (error) {
-    console.error('❌ General Error:', error)
+    console.error('âŒ General Error:', error)
     throw createError({
       statusCode: 500,
-      statusMessage: 'خطای سرور در ذخیره اسکن'
+      statusMessage: 'Ø®Ø·Ø§ÛŒ Ø³Ø±ÙˆØ± Ø¯Ø± Ø°Ø®ÛŒØ±Ù‡ Ø§Ø³Ú©Ù†'
     })
   }
 })

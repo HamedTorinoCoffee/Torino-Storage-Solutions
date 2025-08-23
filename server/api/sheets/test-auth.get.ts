@@ -1,13 +1,13 @@
-// server/api/sheets/test-auth.get.ts
+﻿// server/api/sheets/test-auth.get.ts
 // Test endpoint to verify Google Sheets authentication
 
 export default defineEventHandler(async (event) => {
   try {
-    console.log('🔧 Testing Google Sheets authentication...')
+    console.log('ðŸ”§ Testing Google Sheets authentication...')
     
     // Check environment variables
     const hasClientEmail = !!process.env.GOOGLE_CLIENT_EMAIL
-    const hasPrivateKey = !!process.env.GOOGLE_PRIVATE_KEY
+    const hasPrivateKey = !!process.env.GOOGLE_PRIVATE_KEY_BASE64
     const hasProjectId = !!process.env.GOOGLE_PROJECT_ID
     const hasSheetId = !!process.env.GOOGLE_SHEET_ID
     
@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
     // Create a new JWT client - using object syntax for TypeScript compatibility
     const jwtClient = new google.auth.JWT({
       email: process.env.GOOGLE_CLIENT_EMAIL,
-      key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      key: process.env.GOOGLE_PRIVATE_KEY_BASE64?.replace(/\\n/g, '\n'),
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
     })
     

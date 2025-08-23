@@ -1,4 +1,4 @@
-// server/api/sheets/list.get.ts
+﻿// server/api/sheets/list.get.ts
 // API endpoint to get list of sheets (tabs) from Google Spreadsheet
 
 import type { EventHandler } from 'h3'
@@ -6,8 +6,8 @@ import type { EventHandler } from 'h3'
 export default defineEventHandler(async (event): Promise<any> => {
   try {
     // Check environment variables
-    if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
-      console.error('❌ Missing Google credentials')
+    if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY_BASE64) {
+      console.error('âŒ Missing Google credentials')
       throw createError({
         statusCode: 500,
         statusMessage: 'Missing Google credentials in environment variables'
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event): Promise<any> => {
     const auth = new google.auth.GoogleAuth({
       credentials: {
         client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        private_key: Buffer.from(process.env.GOOGLE_PRIVATE_KEY_BASE64, 'base64').toString('utf-8'),
       },
       scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
     })
@@ -31,14 +31,14 @@ export default defineEventHandler(async (event): Promise<any> => {
     const spreadsheetId = process.env.GOOGLE_SHEET_ID
 
     if (!spreadsheetId) {
-      console.error('❌ No GOOGLE_SHEET_ID found')
+      console.error('âŒ No GOOGLE_SHEET_ID found')
       throw createError({
         statusCode: 500,
         statusMessage: 'Google Sheet ID is not configured'
       })
     }
 
-    console.log('📋 Getting list of sheets from spreadsheet ID:', spreadsheetId)
+    console.log('ðŸ“‹ Getting list of sheets from spreadsheet ID:', spreadsheetId)
 
     // Get spreadsheet info with better error handling
     let spreadsheetInfo
@@ -48,7 +48,7 @@ export default defineEventHandler(async (event): Promise<any> => {
         fields: 'sheets.properties'
       })
     } catch (apiError: any) {
-      console.error('❌ Google Sheets API Error:', {
+      console.error('âŒ Google Sheets API Error:', {
         message: apiError.message,
         code: apiError.code,
         errors: apiError.errors
@@ -67,7 +67,7 @@ export default defineEventHandler(async (event): Promise<any> => {
     })) || []
 
     // Log all sheets found for debugging
-    console.log('📊 All sheets found in spreadsheet:', allSheets.map(s => s.name).join(', '))
+    console.log('ðŸ“Š All sheets found in spreadsheet:', allSheets.map(s => s.name).join(', '))
 
     // Filter out system sheets - Updated list based on your actual sheets
     const systemSheets = [
@@ -87,12 +87,12 @@ export default defineEventHandler(async (event): Promise<any> => {
       return !isSystemSheet && sheet.name.trim() !== ''
     }).sort((a, b) => a.index - b.index)
 
-    console.log('☕ Found cafe sheets:', cafeSheets.map(s => s.name).join(', '))
-    console.log('📈 Total cafe sheets:', cafeSheets.length)
+    console.log('â˜• Found cafe sheets:', cafeSheets.map(s => s.name).join(', '))
+    console.log('ðŸ“ˆ Total cafe sheets:', cafeSheets.length)
 
     // If no cafe sheets found, log warning
     if (cafeSheets.length === 0) {
-      console.warn('⚠️ No cafe sheets found! All sheets:', allSheets.map(s => s.name))
+      console.warn('âš ï¸ No cafe sheets found! All sheets:', allSheets.map(s => s.name))
     }
 
     return {
@@ -110,7 +110,7 @@ export default defineEventHandler(async (event): Promise<any> => {
     }
 
   } catch (error: any) {
-    console.error('❌ Error getting sheets list:', {
+    console.error('âŒ Error getting sheets list:', {
       message: error.message,
       stack: error.stack
     })
