@@ -291,9 +291,11 @@ console.log('🚚 Outbound page is loading!')
 // Auth
 const { user } = useAuth()
 
-// Admin email from config
+// Admin emails from config - FIXED
 const config = useRuntimeConfig()
-const adminEmail = config.public.firstAdminEmail || ''
+const adminEmails = (config.public.adminEmails || 'h.aghasi@torino.company,amirhassan@torino.company')
+  .split(',')
+  .map(email => email.trim().toLowerCase())
 
 // State
 const isCapacitor = ref(false)
@@ -322,7 +324,7 @@ let html5QrCode = null
 onMounted(async () => {
   console.log('🚚 Outbound page mounted')
   console.log('👤 User:', user.value)
-  console.log('📧 Admin email:', adminEmail)
+  console.log('📧 Admin emails:', adminEmails)
   
   console.log('✅ Admin access granted (auth temporarily disabled)')
   
